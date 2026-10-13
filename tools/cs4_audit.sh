@@ -51,7 +51,7 @@ SET PAGESIZE 0 FEEDBACK OFF LINESIZE 200
 PROMPT   moc TRUOC restart:  RHT seqno=5 rba=3896 upd=21:40:01
 PROMPT                       RDTHU seqno=2 rba=92743 upd=21:40:03
 PROMPT                       RPMNVODS seqno=3 rba=50956720 upd=21:36:33  <- quan trong nhat
-PROMPT   --- bay gio ---
+PROMPT   === bay gio ===
 SELECT RPAD(group_name,12)||' seqno='||LPAD(seqno,6)||' rba='||LPAD(rba,12)
        ||' log_bsn='||LPAD(NVL(log_bsn,'-'),14)
        ||' upd='||TO_CHAR(last_update_ts,'HH24:MI:SS') FROM ogg_bsh.rht

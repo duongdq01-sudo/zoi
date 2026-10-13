@@ -15,7 +15,6 @@
 --       DV_GOLDENGATE_ADMIN, DV_XSTREAM_ADMIN, XDBADMIN
 --   -> Neu cong cu dung OGG_BSH thi no thua ke toan bo quyen tren.
 --
--- TRUOC KHI CHAY: sua 4 bien o muc 0.
 -- SAU KHI CHAY  : khai bao mat khau vao /u01/app/ggadmin/conf/secrets.ini
 --                 roi XOA file nay hoac chmod 600 (no chua mat khau dang ro).
 -- =====================================================================
@@ -30,19 +29,19 @@ WHENEVER SQLERROR CONTINUE
 
 PROMPT
 PROMPT ===================================================================
-PROMPT === 0. BIEN - SUA 4 DONG DUOI DAY TRUOC KHI CHAY ===
+PROMPT === 0. Bien - do cs6_ggadm_users.sh truyen vao ===
 PROMPT ===================================================================
 
--- Mat khau cho 2 account moi o DB DICH. Dat manh, khong dau nhay don.
-DEFINE pw_ro      = 'DoiMatKhauNay_RO_1'
-DEFINE pw_load    = 'DoiMatKhauNay_LOAD_1'
-
--- Credential ma DB LINK dung de dang nhap sang DB NGUON.
--- MAC DINH dung OGG_BSH vi hom nay chi co credential nay.
--- NEN DOI sang mot account chi-doc rieng o nguon ngay khi DBA nguon tao
--- duoc - xem muc 9 cuoi file. Khi do chi can sua 2 dong nay va tao lai link.
-DEFINE src_user   = 'OGG_BSH'
-DEFINE src_pw     = 'DatMatKhauOGG_BSH_O_NGUON'
+-- KHONG DEFINE mat khau o day.
+--
+-- LY DO (loi da gap that 2026-10-13): neu file nay tu DEFINE thi gia tri
+-- do GHI DE len gia tri ma wrapper da DEFINE truoc khi goi @file -> chot
+-- chan 0b kich hoat oan, khong account nao duoc tao, va cac buoc sau
+-- khong dang nhap duoc (ORA-01017).
+--
+-- Dung cs6_ggadm_users.sh: no tu sinh mat khau 2 account moi, doc mat khau
+-- nguon tu conf/secrets.ini, roi DEFINE pw_ro / pw_load / src_user /
+-- src_pw / src_dsn truoc khi goi file nay.
 
 -- Chuoi ket noi tai NGUON.
 -- Dung alias TNS 'PMNV' da co trong tnsnames.ora cua DB server:
@@ -50,9 +49,32 @@ DEFINE src_pw     = 'DatMatKhauOGG_BSH_O_NGUON'
 -- LUU Y: ca 2 DB deu co SERVICE_NAME = BSHC. Alias PMNV tro ve IP nguon
 -- 172.16.33.68, con alias BSHC tro ve dich. Phan biet nam trong tnsnames.ora,
 -- nen PHAI kiem alias phan giai dung TRUOC khi tao link (xem muc 0 cua .sh).
-DEFINE src_dsn    = 'PMNV'
 
 PROMPT
+PROMPT
+PROMPT === 0b. CHOT CHAN: mat khau phai do wrapper truyen vao ===
+-- File .sql nay KHONG tu dat mat khau. Nguoi chay dung la cs6_ggadm_users.sh:
+-- no tu sinh mat khau cho 2 account moi va doc mat khau nguon tu
+-- conf/secrets.ini, roi DEFINE lai 3 bien duoi truoc khi goi @file nay.
+-- Neu chay file .sql mot minh thi 3 bien con la sentinel -> DUNG NGAY,
+-- tranh tao account voi mat khau ai cung doc duoc trong git.
+WHENEVER SQLERROR EXIT FAILURE
+DECLARE
+  v_ro   VARCHAR2(200) := '&pw_ro';
+  v_load VARCHAR2(200) := '&pw_load';
+  v_src  VARCHAR2(200) := '&src_pw';
+BEGIN
+  IF v_ro IS NULL OR v_load IS NULL OR v_src IS NULL
+     OR LENGTH(v_ro) < 8 OR LENGTH(v_load) < 8 OR LENGTH(v_src) < 4
+     OR v_ro LIKE '\_\_PHAI%' ESCAPE '\' THEN
+    RAISE_APPLICATION_ERROR(-20099,
+      'Thieu mat khau. Dung chay file .sql mot minh; chay: bash cs6_ggadm_users.sh --apply');
+  END IF;
+  DBMS_OUTPUT.PUT_LINE('  [ OK ] 3 mat khau da duoc wrapper truyen vao');
+END;
+/
+WHENEVER SQLERROR CONTINUE
+
 PROMPT ===================================================================
 PROMPT === 1. Profile rieng cho account dich vu ===
 PROMPT ===================================================================
@@ -84,15 +106,31 @@ PROMPT ===================================================================
 PROMPT === 2. Tao 2 account ===
 PROMPT ===================================================================
 
-CREATE USER GGADM_RO   IDENTIFIED BY "&pw_ro"
-  DEFAULT TABLESPACE BSH_DATA TEMPORARY TABLESPACE TEMP
-  PROFILE GGADMIN_SVC
-  QUOTA 0 ON BSH_DATA;
-
-CREATE USER GGADM_LOAD IDENTIFIED BY "&pw_load"
-  DEFAULT TABLESPACE BSH_DATA TEMPORARY TABLESPACE TEMP
-  PROFILE GGADMIN_SVC
-  QUOTA 0 ON BSH_DATA;
+-- Idempotent: chay lai nhieu lan khong loi. Neu account da co thi doi
+-- mat khau va dam bao profile/quota dung, chu khong bao ORA-01920.
+DECLARE
+  PROCEDURE ensure_user(p_name VARCHAR2, p_pw VARCHAR2) IS
+    n PLS_INTEGER;
+  BEGIN
+    SELECT COUNT(*) INTO n FROM dba_users WHERE username = p_name;
+    IF n = 0 THEN
+      EXECUTE IMMEDIATE 'CREATE USER ' || p_name || ' IDENTIFIED BY "' || p_pw || '"'
+        || ' DEFAULT TABLESPACE BSH_DATA TEMPORARY TABLESPACE TEMP'
+        || ' PROFILE GGADMIN_SVC QUOTA 0 ON BSH_DATA';
+      DBMS_OUTPUT.PUT_LINE('  da tao ' || p_name);
+    ELSE
+      EXECUTE IMMEDIATE 'ALTER USER ' || p_name || ' IDENTIFIED BY "' || p_pw || '"';
+      EXECUTE IMMEDIATE 'ALTER USER ' || p_name || ' PROFILE GGADMIN_SVC';
+      EXECUTE IMMEDIATE 'ALTER USER ' || p_name || ' QUOTA 0 ON BSH_DATA';
+      EXECUTE IMMEDIATE 'ALTER USER ' || p_name || ' ACCOUNT UNLOCK';
+      DBMS_OUTPUT.PUT_LINE('  ' || p_name || ' da co -> dat lai mat khau/profile/quota');
+    END IF;
+  END;
+BEGIN
+  ensure_user('GGADM_RO',   '&pw_ro');
+  ensure_user('GGADM_LOAD', '&pw_load');
+END;
+/
 
 -- QUOTA 0: ca hai account KHONG tao duoc segment nao cua rieng no.
 -- Chung chi doc/ghi vao bang cua schema ODS. Day la mot lop chan them:
@@ -244,25 +282,25 @@ SELECT username, account_status, profile, default_tablespace,
   FROM dba_users WHERE username LIKE 'GGADM%' ORDER BY username;
 
 PROMPT
-PROMPT --- quyen he thong (phai dung danh sach o muc 3) ---
+PROMPT === quyen he thong (phai dung danh sach o muc 3) ===
 COL grantee FOR A14
 COL privilege FOR A26
 SELECT grantee, privilege FROM dba_sys_privs
  WHERE grantee LIKE 'GGADM%' ORDER BY grantee, privilege;
 
 PROMPT
-PROMPT --- role ---
+PROMPT === role ===
 SELECT grantee, granted_role FROM dba_role_privs
  WHERE grantee LIKE 'GGADM%' ORDER BY grantee, granted_role;
 
 PROMPT
-PROMPT --- so bang duoc cap, theo quyen ---
+PROMPT === so bang duoc cap, theo quyen ===
 SELECT grantee, privilege, COUNT(*) so_bang
   FROM dba_tab_privs WHERE grantee LIKE 'GGADM%' AND owner = 'ODS'
  GROUP BY grantee, privilege ORDER BY grantee, privilege;
 
 PROMPT
-PROMPT --- khang dinh GGADM_LOAD KHONG ghi duoc ngoai 73 bang ---
+PROMPT === khang dinh GGADM_LOAD KHONG ghi duoc ngoai 73 bang ===
 SELECT 'GGADM_LOAD co quyen ghi tren ' || COUNT(DISTINCT table_name) ||
        ' / ' || (SELECT COUNT(*) FROM dba_tables WHERE owner='ODS') ||
        ' bang ODS  (mong doi 73)' muc
@@ -270,7 +308,7 @@ SELECT 'GGADM_LOAD co quyen ghi tren ' || COUNT(DISTINCT table_name) ||
  WHERE grantee = 'GGADM_LOAD' AND owner = 'ODS' AND privilege IN ('INSERT','DELETE');
 
 PROMPT
-PROMPT --- DB link sau khi tao ---
+PROMPT === DB link sau khi tao ===
 COL owner FOR A12
 COL db_link FOR A14
 COL host FOR A34
@@ -286,7 +324,7 @@ PROMPT   1. Chay 2 lenh CREATE DATABASE LINK o muc 6, bang chinh account do.
 PROMPT   2. Them 2 khoi vao /u01/app/ggadmin/conf/secrets.ini (chmod 600):
 PROMPT        [ggadm_ro]     user/dsn/password
 PROMPT        [ggadm_load]   user/dsn/password
-PROMPT   3. XOA file nay hoac chmod 600 - no chua mat khau dang ro.
+PROMPT   3. 2 file cs6_* KHONG chua mat khau nao (tu sinh + doc tu secrets.ini).
 PROMPT   4. Ghi lai: profile GGADMIN_SVC co PASSWORD_LIFE_TIME UNLIMITED,
 PROMPT      nen 2 account nay KHONG het han. Profile DEFAULT la 180 ngay.
 PROMPT
