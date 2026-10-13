@@ -1,0 +1,7 @@
+﻿# CPython standalone cho ggadmin - sinh boi tools/fetch_python.ps1
+# 2026-10-13 20:57:32
+release_tag  20261009
+asset        cpython-3.12.15+20261009-x86_64_v2-unknown-linux-gnu-install_only.tar.gz
+size_bytes   65578452
+sha256       65cd75518588c2c0247aefa2dd48da01302b166c2a9aac63621115b23889058a
+url          https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.12.15%2B20261009-x86_64_v2-unknown-linux-gnu-install_only.tar.gz

@@ -1,0 +1,27 @@
+# Nhi phan tai ve - KHONG commit, tai lai bang tools/ + doi chieu MANIFEST.txt
+wheelhouse/*.whl
+wheelhouse/*.tar.gz
+vendor-runtime/*.tar.gz
+# nhung MANIFEST.txt thi PHAI commit: no giu release tag + SHA-256 de tai lai y nguyen
+!wheelhouse/MANIFEST.txt
+!vendor-runtime/MANIFEST.txt
+
+# Bi mat - khong bao gio commit
+conf/secrets.ini
+conf/app.toml
+*.pem
+*.key
+
+# Runtime
+venv/
+py/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+logs/
+scripts/*.sql
+scripts/*.sh
+backup/

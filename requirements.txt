@@ -1,0 +1,18 @@
+# ggadmin - phu thuoc TRUC TIEP, pin cung.
+# Phien ban chon KHOP VOI may Windows cua DBA (da kiem 2026-10-13) de dev == prod.
+# Transitive dependency do pip tu giai, nhung van duoc tai xuong wheelhouse/.
+#
+# Muc tieu: Python 3.12 / manylinux2014_x86_64  (xem tools/make_wheels.ps1)
+# Khong dung pydantic-settings: cau hinh doc bang tomllib trong stdlib 3.11+.
+# Khong dung argon2: hash mat khau bang hashlib.pbkdf2_hmac trong stdlib.
+
+fastapi==0.141.1
+uvicorn==0.52.4
+oracledb==3.4.2
+jinja2==3.1.6
+itsdangerous==2.2.0
+python-multipart==0.0.32
+
+# pin tuong minh du la transitive, de dev == prod
+pydantic==2.13.4
+starlette==1.6.0
