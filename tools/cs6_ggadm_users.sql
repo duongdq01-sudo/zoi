@@ -44,11 +44,13 @@ DEFINE pw_load    = 'DoiMatKhauNay_LOAD_1'
 DEFINE src_user   = 'OGG_BSH'
 DEFINE src_pw     = 'DatMatKhauOGG_BSH_O_NGUON'
 
--- Chuoi ket noi tai NGUON. Giong y link dang chay OGG_BSH.DBL_PMNV.
--- Dung EZConnect chu KHONG dung alias TNS: ben trong DB, viec phan giai
--- tnsnames.ora phu thuoc TNS_ADMIN cua DB, de hong hon.
--- LUU Y: ca 2 DB deu co SERVICE_NAME = BSHC, nen BAT BUOC phan biet bang IP.
-DEFINE src_dsn    = '172.16.33.68:1521/BSHC'
+-- Chuoi ket noi tai NGUON.
+-- Dung alias TNS 'PMNV' da co trong tnsnames.ora cua DB server:
+--   /u01/app/oracle/product/19.3.0.0/dbhome_1/network/admin/tnsnames.ora
+-- LUU Y: ca 2 DB deu co SERVICE_NAME = BSHC. Alias PMNV tro ve IP nguon
+-- 172.16.33.68, con alias BSHC tro ve dich. Phan biet nam trong tnsnames.ora,
+-- nen PHAI kiem alias phan giai dung TRUOC khi tao link (xem muc 0 cua .sh).
+DEFINE src_dsn    = 'PMNV'
 
 PROMPT
 PROMPT ===================================================================

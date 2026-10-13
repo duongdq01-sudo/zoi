@@ -26,7 +26,7 @@ SRC_USER='OGG_BSH'
 SRC_PW='DatMatKhauOGG_BSH_O_NGUON'      # mat khau cua OGG_BSH tai DB NGUON
 # ------------------------------------------------------------------------
 
-SRC_DSN='172.16.33.68:1521/BSHC'        # EZConnect, giong link OGG_BSH.DBL_PMNV
+SRC_DSN='PMNV'                          # alias TNS trong tnsnames.ora cua DB server
 TGT_DSN='localhost:1521/BSHC'
 SQLFILE="$(dirname "$0")/cs6_ggadm_users.sql"
 APPLY=0
@@ -48,6 +48,27 @@ done
 echo "  [ OK ] 4 bien da duoc dat"
 [ -f "$SQLFILE" ] || { echo "  [FAIL] khong thay $SQLFILE"; exit 1; }
 echo "  [ OK ] $SQLFILE"
+
+# Link dung alias TNS nen PHAI chac alias phan giai dung TRUOC khi tao link.
+# Ca 2 DB cung SERVICE_NAME=BSHC, phan biet nam trong tnsnames.ora -> neu
+# alias PMNV bi sua tro vao DICH thi link se vong lai chinh minh.
+TNSDIR="${TNS_ADMIN:-$ORACLE_HOME/network/admin}"
+echo "  tnsnames : $TNSDIR/tnsnames.ora"
+if grep -qiE "^[[:space:]]*$SRC_DSN[[:space:]]*=" "$TNSDIR/tnsnames.ora" 2>/dev/null; then
+  echo "  [ OK ] co entry $SRC_DSN trong tnsnames.ora"
+  echo "         HOST   = $(awk "/^[[:space:]]*$SRC_DSN[[:space:]]*=/,/^[[:space:]]*\\$/" "$TNSDIR/tnsnames.ora" | grep -oiE "HOST[[:space:]]*=[[:space:]]*[^)[:space:]]+" | head -1)"
+  echo "         SERVICE= $(awk "/^[[:space:]]*$SRC_DSN[[:space:]]*=/,/^[[:space:]]*\\$/" "$TNSDIR/tnsnames.ora" | grep -oiE "SERVICE_NAME[[:space:]]*=[[:space:]]*[^)[:space:]]+" | head -1)"
+else
+  echo "  [FAIL] khong thay entry $SRC_DSN trong $TNSDIR/tnsnames.ora"; exit 1
+fi
+if command -v tnsping >/dev/null 2>&1; then
+  if tnsping "$SRC_DSN" 2>&1 | grep -q "OK ("; then
+    echo "  [ OK ] tnsping $SRC_DSN thanh cong"
+  else
+    echo "  [FAIL] tnsping $SRC_DSN that bai:"
+    tnsping "$SRC_DSN" 2>&1 | tail -3 | sed "s/^/        /"; exit 1
+  fi
+fi
 echo "  nguon : $SRC_USER@$SRC_DSN"
 echo "  dich  : $TGT_DSN"
 if [ "$APPLY" -eq 0 ]; then
