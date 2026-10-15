@@ -1,0 +1,9 @@
+Program     Status      Group       Lag at Chkpt  Time Since Chkpt
+
+MANAGER     RUNNING
+EXTRACT     RUNNING     ETDTHU      00:00:00      00:00:05
+EXTRACT     RUNNING     ETHT        00:00:00      00:00:01
+EXTRACT     RUNNING     ETPMNV      00:00:00      00:00:08
+REPLICAT    RUNNING     RDTHU       00:00:00      00:00:02
+REPLICAT    RUNNING     RHT         00:00:00      00:00:09
+REPLICAT    RUNNING     RPMNVODS    00:07:45      00:00:00

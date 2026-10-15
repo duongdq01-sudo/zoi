@@ -1,0 +1,14 @@
+REPLICAT   RHT       Last Started 2026-10-13 17:20   Status RUNNING
+INTEGRATED
+Checkpoint Lag       00:00:00 (updated 00:00:02 ago)
+Process ID           412233
+Log Read Checkpoint  File /u01/app/ogg/dirdat/ht000000004
+                     2026-10-14 09:12:41.000000  RBA 1829447
+
+Current Log BSN value: 146308429
+Low Watermark CSN value: 150502811
+High Watermark CSN value: 150502846
+
+  Extract Source                          Begin             End
+
+  /u01/app/ogg/dirdat/ht000000004            2026-10-13 17:20  2026-10-14 09:12

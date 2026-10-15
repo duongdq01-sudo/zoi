@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Tổng quan &mdash; ggadmin{% endblock %}
+{% block body %}
+<div id="body" hx-get="/fragment/dashboard" hx-trigger="every 15s" hx-swap="innerHTML">
+  {% include "_dashboard_body.html" %}
+</div>
+{% endblock %}

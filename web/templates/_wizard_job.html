@@ -1,0 +1,50 @@
+{# Trang thai job ROI RA cua buoc wizard dang CHO. htmx poll moi 10s. #}
+<article class="xacnhan {{ 'l1' if r.state in ('QUEUED','RUNNING') else '' }}"
+  {% if r.state in ('QUEUED','RUNNING') %}
+  hx-get="/wizard/{{ rid }}/job" hx-trigger="every 10s" hx-swap="outerHTML"
+  {% endif %}>
+  <header>
+    <strong>Bước {{ no }} &mdash; việc chạy nền
+      {% if r.job %}#{{ r.job.id }} <code>{{ r.job.kind }}</code>{% endif %}
+    </strong>
+    <span class="{{ 'ok' if r.state == 'PASS' else ('bad' if r.state == 'FAIL' else 'warn') }}">
+      {{ r.state }}</span>
+  </header>
+
+  {% if r.state in ('QUEUED','RUNNING') %}
+  <p><small class="muted">Việc này chạy <strong>ngoài tiến trình web</strong>.
+    Mất đường hầm hay khởi động lại công cụ thì nó vẫn chạy. Trang này tự cập
+    nhật mỗi 10 giây; đóng trang cũng không ảnh hưởng gì.
+    {% if r.job %}<br>Theo dõi bằng tay trên server:
+    <code>tail -f logs/job_{{ r.job.id }}.log</code>{% endif %}</small></p>
+  {% elif r.state == 'PASS' %}
+  <p class="ok">Việc đã xong <strong>và</strong> phần kiểm chứng lại trên DB đã
+    đạt. Bước này hoàn thành, quy trình chuyển sang bước kế tiếp.</p>
+  {% elif r.state == 'FAIL' %}
+  <p class="bad">{{ r.job.err_msg if r.job and r.job.err_msg else 'Việc chạy thất bại' }}</p>
+  <p><small class="muted">Lưu ý: bước vẫn báo lỗi cả khi việc chạy báo thành
+    công nhưng <strong>kiểm chứng trên DB không đạt</strong> &mdash; mã thoát 0
+    của <code>sqlplus</code> không đủ để kết luận việc đã xong đúng.</small></p>
+  {% elif r.state == 'KHONG_CO_JOB' %}
+  <p><small class="muted">Bước này không chờ việc nào.</small></p>
+  {% endif %}
+
+  {% if r.ghi_chu %}
+  <p><strong>Kiểm chứng lại trên DB</strong></p>
+  <ul>{% for g in r.ghi_chu %}<li><small>{{ g }}</small></li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if r.log %}
+  <details {% if r.state == 'FAIL' %}open{% endif %}>
+    <summary><small>Cuối log ({{ r.log|length }} dòng)</small></summary>
+    <pre class="diff">{% for l in r.log %}{{ l }}
+{% endfor %}</pre>
+  </details>
+  {% endif %}
+
+  {% if r.state in ('PASS','FAIL') %}
+  <p><a href="/wizard/{{ rid }}" role="button" class="outline">Tải lại quy trình</a>
+     {% if r.job %}<a href="/jobs/{{ r.job.id }}/log" role="button"
+       class="secondary outline">Log đầy đủ</a>{% endif %}</p>
+  {% endif %}
+</article>

@@ -1,0 +1,75 @@
+{% extends "base.html" %}{% block title %}Đối chiếu &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>Đối chiếu dữ liệu nguồn / đích</h4>
+<article>
+  <p><strong>Hai chế độ, khác nhau về độ tin cậy:</strong></p>
+  <div class="kv">
+    <b>Nhanh</b>
+    <span>Không dừng gì cả. Đọc mốc <strong>High Watermark</strong> của Replicat
+      đang chạy rồi so <code>COUNT(*)</code> và checksum <code>ORA_HASH</code>.
+      <strong class="warn">Có thể báo lệch oan</strong> vì đích vẫn đang thay
+      đổi trong lúc đếm. Dùng để soi nhanh.</span>
+    <b>Chuẩn</b>
+    <span>Dừng tạm các tiến trình đúng quy trình để chụp một thời điểm chính
+      xác: dừng Extract &rarr; chờ chảy hết (<code>rba</code> = kích thước file
+      trail <em>VÀ</em> lag về <code>00:00:00</code>) &rarr; dừng Replicat
+      &rarr; đọc mốc <strong>High</strong> &rarr; so sánh &rarr; chạy lại
+      (Replicat trước, Extract sau). Không báo lệch oan, nhưng
+      <strong>dừng cả luồng</strong> trong lúc đó nên là thao tác
+      <strong>mức L2</strong>.
+      <br><small class="muted">Vòng chờ KHÔNG BAO GIỜ chờ
+      <code>Low WM = High WM</code> &mdash; hai mốc đó không gặp nhau, vòng chờ
+      sẽ chạy hết số lần rồi báo thất bại trên một hệ hoàn toàn bình
+      thường.</small></span>
+  </div>
+  <p><small class="muted">Luật không đổi: SCN khi đối chiếu phải là mốc
+  <strong>High</strong> Watermark &mdash; không bao giờ dùng Low WM hay
+  <code>current_scn</code>, cả hai đều cho kết quả sai. Không đọc được High WM
+  thì <strong>dừng, không đối chiếu</strong>: đối chiếu ở SCN sai còn tệ hơn
+  không đối chiếu.</small></p>
+
+  {% if busy %}
+    <p class="warn">Đang có một việc đối chiếu chạy. Tối đa 1 việc trên toàn hệ
+    &mdash; RAM trống chỉ khoảng 6 GB, mà <code>ORA_HASH</code> trên bảng 256
+    triệu dòng ngốn bộ nhớ đáng kể. Để nhiều việc chạy song song thì chính công
+    cụ giám sát sẽ gây ra sự cố nó đang giám sát.</p>
+  {% else %}
+  <form method="post" action="/verify/run">
+    <div class="grid">
+      <select name="stream" required aria-label="Luồng">
+        {% for sid, st in cfg.streams.items() %}
+        <option value="{{ sid }}">{{ sid }} &mdash; {{ st.ten }} ({{ st.replicat }})</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="mode" value="LIVE">
+      <button type="submit">Đối chiếu nhanh &mdash; không dừng gì</button>
+    </div>
+  </form>
+
+  <hr>
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="VERIFY_SNAPSHOT">
+    <div class="grid">
+      <select name="target" required aria-label="Luồng">
+        {% for sid, st in cfg.streams.items() %}
+        <option value="{{ sid }}">{{ sid }} &mdash; {{ st.ten }}
+          ({{ st.extract }} + {{ st.replicat }})</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="reason" required minlength="10"
+             placeholder="lý do (từ 10 ký tự)">
+      <button type="submit" class="contrast outline">Đối chiếu chuẩn (L2)</button>
+    </div>
+    <small class="muted">Sẽ DỪNG cả Extract và Replicat của luồng đã chọn.
+      Luồng được chạy lại tự động, kể cả khi việc đối chiếu bị lỗi.</small>
+  </form>
+  {% endif %}
+</article>
+
+<div id="khung"></div>
+
+<div id="vbody" {% if job and job.state in ("QUEUED", "RUNNING") %}
+     hx-get="/verify/job/{{ job.id }}" hx-trigger="every 5s" hx-swap="innerHTML"{% endif %}>
+  {% include "_verify_body.html" %}
+</div>
+{% endblock %}

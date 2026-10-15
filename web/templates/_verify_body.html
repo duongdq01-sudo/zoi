@@ -1,0 +1,47 @@
+{% if job %}
+<article>
+  <strong>Việc #{{ job.id }}</strong> &mdash; {{ job.kind }} &mdash;
+  <span class="{{ "ok" if job.state == "SUCCEEDED" else ("bad" if job.state == "FAILED" else "warn") }}">{{ job.state }}</span>
+  {% if job.progress_pct is not none %}
+    <progress value="{{ job.progress_pct }}" max="100"></progress> {{ job.progress_pct }}%
+  {% endif %}
+  <br><small class="muted">{{ job.progress_note or "" }}</small>
+  {% if job.err_msg %}<br><span class="bad">{{ job.err_msg }}</span>{% endif %}
+  {% if job.result_json %}<br><small><code>{{ job.result_json }}</code></small>{% endif %}
+</article>
+{% endif %}
+
+{% if rows %}
+<table role="grid">
+<thead><tr><th>Bảng</th><th>Dòng ở nguồn</th><th>Dòng ở đích</th><th>Lệch</th>
+<th>Checksum nguồn</th><th>Checksum đích</th><th>Số cột</th><th>Kết quả</th>
+<th>ms</th></tr></thead>
+<tbody>
+{% for v in rows %}
+<tr>
+  <td><code>{{ v.src_table }}</code></td>
+  <td>{{ v.src_count|songuyen }}</td>
+  <td>{{ v.tgt_count|songuyen }}</td>
+  <td class="{{ "bad" if v.src_count is not none and v.tgt_count is not none and v.src_count != v.tgt_count else "" }}">
+    {% if v.src_count is not none and v.tgt_count is not none %}{{ v.src_count - v.tgt_count }}{% else %}-{% endif %}</td>
+  <td><small>{{ v.src_hash or "-" }}</small></td>
+  <td><small>{{ v.tgt_hash or "-" }}</small></td>
+  <td>{{ v.col_count or "-" }}</td>
+  <td>
+    {% if v.err_msg %}<span class="bad">LỖI</span><br><small>{{ v.err_msg }}</small>
+    {% elif v.matched is none %}<span class="muted">đang chạy</span>
+    {% elif v.matched %}<span class="ok">KHỚP</span>
+    {% else %}<span class="bad">LỆCH</span>{% endif %}
+  </td>
+  <td><small>{{ v.duration_ms or "-" }}</small></td>
+</tr>
+{% endfor %}
+</tbody></table>
+<p><small class="muted">Mỗi lần đối chiếu đều lưu lại <code>hash_expr_sha256</code>
+&mdash; chữ ký của biểu thức checksum. Lý do: tham số có
+<code>DDL INCLUDE MAPPED</code> nên khi nguồn thêm cột thì biểu thức checksum
+đổi, hash đổi theo <strong>mà không phải vì dữ liệu lệch</strong>. Không lưu
+biểu thức thì sẽ mất cả buổi truy một &laquo;sai lệch&raquo; không tồn tại.</small></p>
+{% elif not job %}
+<p><small class="muted">Chưa chạy lần nào.</small></p>
+{% endif %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}{% block title %}Lịch sử &mdash; ggadmin{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="/static/vendor/uplot.min.css">
+<h4>Lịch sử số liệu đo được</h4>
+<p>
+  {% for k, v in series.items() %}
+  <a href="/history?kind={{ k }}&hours={{ hours }}" role="button"
+     class="{{ "" if kind == k else "outline" }}">{{ v[0] }}</a>
+  {% endfor %}
+</p>
+<p>
+  {% for h in [1, 6, 24, 72, 168, 720] %}
+  <a href="/history?kind={{ kind }}&hours={{ h }}" role="button"
+     class="{{ "" if hours == h else "outline" }}">
+    {% if h < 24 %}{{ h }} giờ{% elif h == 24 %}1 ngày{% else %}{{ (h / 24)|int }} ngày{% endif %}
+  </a>
+  {% endfor %}
+</p>
+
+<article>
+  <div id="chart" style="min-height:22rem"></div>
+  <div id="chart-info"><small class="muted">đang tải...</small></div>
+</article>
+
+<article>
+  <h4>Khối lượng dữ liệu đang giữ</h4>
+  <div class="kv">
+    <b>Số liệu gốc</b>
+    <span>{{ hstats.raw_diem|songuyen }} điểm /
+      {{ hstats.raw_tick|songuyen }} lần đo
+      {% if hstats.raw_tu %}<small class="muted">từ {{ hstats.raw_tu|hhmm }}
+      đến {{ hstats.raw_den|hhmm }}</small>{% endif %}</span>
+    <b>Gom theo giờ</b>
+    <span>{{ hstats.gio_diem|songuyen }} dòng</span>
+    <b>Cách giữ</b>
+    <span>giữ <strong>{{ cfg.retain_raw_days }} ngày</strong> số liệu gốc rồi
+      xoá; bản gom theo giờ giữ mãi &rarr; file dưới 200 MB vĩnh viễn</span>
+  </div>
+  <p><small class="muted">Khoảng trên 72 giờ thì đồ thị tự động dùng bản gom
+  theo giờ thay cho số liệu gốc: gốc đo 30 giây một điểm, nên 30 ngày là khoảng
+  86.000 điểm mỗi chuỗi &mdash; vẽ không kịp mà cũng không cần thiết.
+  <strong>Thứ tự quan trọng:</strong> gom trước rồi mới xoá &mdash; xoá trước là
+  mất dữ liệu vĩnh viễn.</small></p>
+</article>
+
+<script src="/static/vendor/uplot.iife.min.js"></script>
+<script>
+// Chi 3 loai do thi nen viet truc tiep, khong can wrapper nang.
+// uPlot thay vi Chart.js: 47 KB so voi ~200 KB, va ve hang chuc nghin diem
+// khong nghen - poll 30s x nhieu metric x nhieu ngay thi dung la hang chuc nghin.
+const MAU = ["#1E88E5","#e74c3c","#26a65b","#e67e22","#9b59b6",
+             "#16a085","#f1c40f","#7f8c8d","#2c3e50","#d35400","#2980b9"];
+
+function ve(d) {
+  const el = document.getElementById("chart");
+  el.innerHTML = "";
+  const keys = d.keys || [];
+  if (!keys.length) {
+    document.getElementById("chart-info").innerHTML =
+      "<small class='warn'>Chưa có dữ liệu cho khoảng thời gian này.</small>";
+    return;
+  }
+  // Gop moc thoi gian cua moi chuoi lai thanh mot truc x chung
+  const tset = new Set();
+  keys.forEach(k => (d.diem[k] || []).forEach(p => tset.add(p[0])));
+  const xs = Array.from(tset).sort((a, b) => a - b);
+  const idx = new Map(xs.map((t, i) => [t, i]));
+  const data = [xs.map(t => t / 1000)];
+  keys.forEach(k => {
+    const col = new Array(xs.length).fill(null);
+    (d.diem[k] || []).forEach(p => { col[idx.get(p[0])] = p[1]; });
+    data.push(col);
+  });
+  const sers = [{}].concat(keys.map((k, i) => ({
+    label: k, stroke: MAU[i % MAU.length], width: 1.6,
+    value: (u, v) => v == null ? "-" : v + " " + d.don_vi,
+  })));
+  new uPlot({
+    width: el.clientWidth || 900, height: 320,
+    scales: { x: { time: true } },
+    axes: [{}, { label: d.don_vi }],
+    series: sers,
+    legend: { live: true },
+  }, data, el);
+  document.getElementById("chart-info").innerHTML =
+    "<small class='muted'>" + d.nhan + " &mdash; đơn vị " + d.don_vi +
+    " &mdash; nguồn: " + d.nguon + " &mdash; " + keys.length +
+    " chuỗi, " + xs.length + " mốc thời gian</small>";
+}
+
+fetch("/api/series/{{ kind }}?hours={{ hours }}")
+  .then(r => r.json())
+  .then(d => { if (d.loi) { throw new Error(d.loi); } ve(d); })
+  .catch(e => {
+    document.getElementById("chart-info").innerHTML =
+      "<small class='bad'>Không tải được số liệu: " + e.message + "</small>";
+  });
+</script>
+{% endblock %}

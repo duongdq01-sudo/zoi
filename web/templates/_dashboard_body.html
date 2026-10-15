@@ -1,0 +1,238 @@
+{# Fragment htmx tu refresh 15s. Server render luon HTML, khong JSON.
+
+   Bo cuc theo Pattern A cua layout-patterns.md: KPI cards o TREN CUNG
+   (eye-flow F-pattern), roi den canh bao, roi cac the chi tiet.
+#}
+
+{# ---- So lieu cho hang KPI ---------------------------------------- #}
+{% set chay = s.procs | selectattr('is_running') | list | length %}
+{% set tong = s.procs | length %}
+{% set lags = s.procs | map(attribute='lag_s') | select('number') | list %}
+{% set lag_max = (lags | max) if lags else 0 %}
+{% set n_canh = s.alerts | length %}
+{% set gb = s.fs.get('avail_gb') or 0 %}
+{% set dong_la = s.discards.values() | map(attribute='so_dong_la')
+                 | select('number') | sum %}
+
+{% set ic_proc %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>{% endset %}
+{% set ic_lag %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>{% endset %}
+{% set ic_canh %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>{% endset %}
+{% set ic_dia %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>{% endset %}
+{% set ic_bo %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg>{% endset %}
+
+<div class="kpi-hang">
+  <div class="kpi {{ 'tot' if chay == tong and tong else 'nguy' }}">
+    <div class="nhan">Tiến trình đang chạy<span class="bg">{{ ic_proc }}</span></div>
+    <div class="so">{{ chay }}<span class="dv">/ {{ tong }}</span></div>
+    <div class="duoi {{ 'tot' if chay == tong and tong else 'nguy' }}">
+      {% if tong and chay == tong %}▲ đủ cả {{ tong }}
+      {% else %}▼ thiếu {{ tong - chay }} tiến trình{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi {{ 'tot' if lag_max <= 60 else ('canh' if lag_max <= 1800 else 'nguy') }}">
+    <div class="nhan">Chậm sau nguồn, cao nhất<span class="bg">{{ ic_lag }}</span></div>
+    <div class="so">{{ lag_max }}<span class="dv">giây</span></div>
+    <div class="duoi {{ 'tot' if lag_max <= 60 else ('canh' if lag_max <= 1800 else 'nguy') }}">
+      {% if lag_max <= 60 %}▲ trong mức bình thường
+      {% elif lag_max <= 1800 %}▼ trên 1 phút
+      {% else %}▼ trên 30 phút{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi {{ 'tot' if n_canh == 0 else 'nguy' }}">
+    <div class="nhan">Cảnh báo đang mở<span class="bg">{{ ic_canh }}</span></div>
+    <div class="so">{{ n_canh }}</div>
+    <div class="duoi {{ 'tot' if n_canh == 0 else 'nguy' }}">
+      {% if n_canh == 0 %}▲ không có gì cần làm
+      {% else %}▼ xem bảng ngay dưới{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi {{ 'nguy' if gb < 25 else ('canh' if gb < 60 else 'tot') }}">
+    <div class="nhan">Đĩa / còn trống<span class="bg">{{ ic_dia }}</span></div>
+    <div class="so">{{ gb|so }}<span class="dv">GB</span></div>
+    <div class="duoi {{ 'nguy' if gb < 25 else ('canh' if gb < 60 else 'tot') }}">
+      {% if gb < 25 %}▼ dưới ngưỡng 25 GB, đã tắt thao tác ghi
+      {% elif gb < 60 %}▼ còn ít, ngưỡng chặn là 25 GB
+      {% else %}▲ {{ s.fs.get('avail_pct')|so }}% trống{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi {{ 'tot' if dong_la == 0 else 'nguy' }}">
+    <div class="nhan">Dòng dữ liệu bị bỏ<span class="bg">{{ ic_bo }}</span></div>
+    <div class="so">{{ dong_la }}</div>
+    <div class="duoi {{ 'tot' if dong_la == 0 else 'nguy' }}">
+      {% if dong_la == 0 %}▲ cả 3 file discard đều sạch
+      {% else %}▼ có bản ghi không áp được vào đích{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if s.errors %}
+<article style="border-left:5px solid var(--warning)">
+  <strong class="warn">Lỗi khi đo ({{ s.errors|length }})</strong>
+  <ul>{% for e in s.errors %}<li><small>{{ e }}</small></li>{% endfor %}</ul>
+</article>
+{% endif %}
+
+{% if s.alerts %}
+<article style="border-left:5px solid var(--danger)">
+  <header><strong class="bad">Cảnh báo đang mở: {{ s.alerts|length }}</strong></header>
+  <table role="grid">
+  <thead><tr><th>Mức</th><th>Luật</th><th>Đối tượng</th><th>Giá trị đỉnh</th>
+  <th>Mở lúc</th><th>Ý nghĩa</th></tr></thead>
+  <tbody>
+  {% for a in s.alerts %}
+  <tr>
+    <td><span class="pill {{ 'bad' if a.severity=='CRIT' else 'warn' }}">{{ a.severity }}</span></td>
+    <td><code>{{ a.name }}</code></td>
+    <td>{{ a.scope_key }}</td>
+    <td>{{ '%.0f'|format(a.peak_val or 0) }}</td>
+    <td>{{ a.opened_at|hhmm }}</td>
+    <td><small>{{ a.note }}</small></td>
+  </tr>
+  {% endfor %}
+  </tbody></table>
+</article>
+{% endif %}
+
+{% if mismatch %}
+<article style="border-left:5px solid var(--warning)">
+  <header><strong class="warn">Đối chiếu cấu hình có lệch</strong></header>
+  <ul>{% for m in mismatch %}<li><small>{{ m }}</small></li>{% endfor %}</ul>
+</article>
+{% endif %}
+
+<h4>Ba luồng replication</h4>
+<div class="grid-3">
+{% for sid, st in cfg.streams.items() %}
+  {% set ext = s.procs | selectattr('name','equalto', st.extract) | first %}
+  {% set rep = s.procs | selectattr('name','equalto', st.replicat) | first %}
+  {% set tr  = s.trails.get(sid, {}) %}
+  {% set dsc = s.discards.get(st.replicat, {}) %}
+  {% set ck  = s.checkpoints | selectattr('group_name','equalto', st.replicat) | first %}
+  {% set khoe = ext and rep and ext.is_running and rep.is_running
+                and (dsc.get('so_dong_la', 0) or 0) == 0 %}
+  <article style="border-left:5px solid {{ 'var(--success)' if khoe else 'var(--danger)' }}">
+    <header>
+      <strong>Luồng {{ sid }}</strong>
+      <small class="muted">&nbsp;{{ st.ten }}</small>
+      <span class="pill {{ 'ok' if khoe else 'bad' }}" style="float:right">
+        {{ 'BÌNH THƯỜNG' if khoe else 'CẦN XEM' }}</span>
+    </header>
+    <div class="kv">
+      <b>Extract</b>
+      <span>
+        <code>{{ st.extract }}</code>
+        {% if ext %}<span class="{{ 'ok' if ext.is_running else 'bad' }}">{{ ext.status }}</span>
+          &middot; chậm {{ ext.lag_s|hms }}{% else %}<span class="bad">không thấy</span>{% endif %}
+      </span>
+      <b>Replicat</b>
+      <span>
+        <code>{{ st.replicat }}</code>
+        {% if rep %}<span class="{{ 'ok' if rep.is_running else 'bad' }}">{{ rep.status }}</span>
+          &middot; chậm {{ rep.lag_s|hms }}{% else %}<span class="bad">không thấy</span>{% endif %}
+      </span>
+      <b>Trail <code>{{ st.trail }}</code></b>
+      <span>{{ tr.get('files', 0) }} file, {{ tr.get('total_bytes')|bytes }}
+        <small class="muted">mới nhất {{ tr.get('newest','-') }}
+        {{ tr.get('newest_bytes')|bytes }}</small></span>
+      <b>Dòng bị bỏ</b>
+      <span>
+        {% if dsc.get('so_dong_la', 0) > 0 %}
+          <span class="bad">{{ dsc.so_dong_la }} dòng</span>
+        {% else %}<span class="ok">0 dòng lạ</span>{% endif %}
+        <small class="muted">file {{ dsc.get('bytes', -1) }} byte,
+          mốc rỗng {{ dsc.get('baseline') }}</small>
+      </span>
+      <b>Mốc đã áp ở đích</b>
+      <span>
+        {% if ck and ck.get('seqno') is not none %}
+          trail số {{ ck.seqno }}, {{ ck.rba|songuyen }} byte
+          {# Dieu kien PHAI boc ca `.strftime`: `last_update_ts` co the la
+             None, luc do goi strftime se no AttributeError va ca trang
+             tong quan tra 500. #}
+          <small class="muted">cập nhật
+            {{ ck.last_update_ts.strftime('%H:%M:%S')
+               if ck.last_update_ts else '-' }}</small>
+        {% elif ck and ck.get('err') %}<span class="bad">{{ ck.err }}</span>
+        {% else %}<span class="muted">-</span>{% endif %}
+      </span>
+    </div>
+  </article>
+{% endfor %}
+</div>
+
+<h4>Trạng thái ở hai đầu và dung lượng</h4>
+<div class="grid-3">
+  <article>
+    <header><strong>Đọc redo ở nguồn</strong></header>
+    <table role="grid"><tbody>
+    {% for c in s.capture %}
+      <tr><td><code>{{ c.capture_name }}</code></td>
+          <td><span class="{{ 'ok' if c.status=='ENABLED' else 'bad' }}">{{ c.status }}</span></td>
+          <td><small class="muted">mốc cần giữ {{ c.required_checkpoint_scn|songuyen }}</small></td></tr>
+      {% if c.error_number %}<tr><td colspan="3" class="bad"><small>{{ c.error_message }}</small></td></tr>{% endif %}
+    {% endfor %}
+    </tbody></table>
+    <p><small class="muted">Sau khi chạy lại, mốc cần giữ không được nhảy vượt
+    vùng redo chưa đọc.</small></p>
+  </article>
+
+  <article>
+    <header><strong>Áp dữ liệu ở đích</strong></header>
+    <table role="grid"><tbody>
+    {% for a in s.apply %}
+      <tr><td><code>{{ a.apply_name }}</code></td>
+          <td><span class="{{ 'ok' if a.status=='ENABLED' else 'bad' }}">{{ a.status }}</span></td></tr>
+    {% endfor %}
+    </tbody></table>
+    <p><small class="muted">Tiến độ THẬT lấy từ bảng checkpoint, không lấy từ
+    <code>dba_apply_progress.applied_message_number</code> &mdash; GoldenGate
+    integrated apply không cập nhật cột đó, nó luôn trả 0.</small></p>
+  </article>
+
+  <article>
+    <header><strong>Nền tảng</strong></header>
+    <div class="kv">
+      <b>Đĩa <code>/</code></b>
+      <span>còn {{ s.fs.get('avail_gb')|so }} GB ({{ s.fs.get('avail_pct')|so }}% trống)</span>
+      <b>Bảng đã bật TRANDATA</b>
+      <span>{{ s.prepared }} <small class="muted">bảng ở nguồn đã sẵn sàng gửi
+        thay đổi</small></span>
+      <b>SCN nguồn</b><span>{{ s.scn_src|songuyen }}</span>
+      <b>Kho mật khẩu</b>
+      <span>{% if s.credstore %}<span class="ok">có <code>cwallet.sso</code></span>
+        {% else %}<span class="bad">THIẾU</span>{% endif %}</span>
+      <b>Mật khẩu dạng rõ</b>
+      <span>{% if s.plaintext_pw == 0 %}<span class="ok">0 / 7 file tham số</span>
+        {% else %}<span class="bad">{{ s.plaintext_pw }} file</span>{% endif %}</span>
+    </div>
+  </article>
+</div>
+
+<article>
+  <header><strong>Datafile của hai vùng lưu trữ</strong></header>
+  <table role="grid">
+  <thead><tr><th>Datafile</th><th>Đang dùng</th><th>Tối đa (MAX)</th><th>Còn nới được</th></tr></thead>
+  <tbody>
+  {% for d in s.datafiles %}
+    <tr>
+      <td><small>{{ d.file_name.rsplit('/',1)[-1] }}</small></td>
+      <td class="{{ 'bad' if (d.size_mb or 0) > 30720 else '' }}">
+        {{ d.size_mb|songuyen }} MB
+        {% if (d.size_mb or 0) > 30720 %}<small>sắp cụng trần 32 GB</small>{% endif %}</td>
+      <td>{% if d.autoextensible == 'YES' %}{{ d.max_mb|songuyen }} MB
+        {%- else %}<span class="muted">không tự nới</span>{% endif %}</td>
+      <td>{{ d.room_mb|songuyen }} MB</td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  <p><small class="muted">Cảnh báo tính theo TỪNG datafile: vùng lưu trữ báo
+  &laquo;còn chỗ&raquo; trong khi một datafile đã cụng trần 32 GB là cái bẫy đã
+  gặp thật (<code>ORA-03206</code>).</small></p>
+</article>
+
+<p><small class="muted">Đo lúc {{ s.ts|hhmm }} ({{ s.age_s }}s trước), mất
+{{ s.duration_ms }} ms. Trang này tự cập nhật mỗi 15 giây.</small></p>

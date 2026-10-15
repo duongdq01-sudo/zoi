@@ -1,0 +1,21 @@
+Oracle Linux 7, x64, 64bit (optimized), Oracle Database 21c and lower supported versions on Jul 29 2021 03:59:23
+Extract    ETHT      Last Started 2026-10-13 21:37   Status RUNNING
+Checkpoint Lag       00:00:03 (updated 00:00:04 ago)
+Process ID           876063
+Log Read Checkpoint  Oracle Integrated Redo Logs
+                     2026-10-14 07:15:50
+                     SCN 0.158531200 (158531200)
+  Target Extract Trails:
+  Trail Name                                       Seqno        RBA     Max MB Trail Type
+  /u01/app/ogg/dirdat/ht                               5     199839        100 EXTTRAIL
+Integrated Extract outbound server first scn: 0.81092257 (81092257)
+Integrated Extract outbound server filtering start scn: 0.130719922 (130719922)
+  Extract Source                          Begin             End
+  Not Available                           2026-10-13 09:25  2026-10-14 07:15
+  Not Available                           * Initialized *   2026-10-13 09:25
+Current directory    /u01/app/ogg
+Report file          /u01/app/ogg/dirrpt/ETHT.rpt
+Parameter file       /u01/app/ogg/dirprm/etht.prm
+Checkpoint file      /u01/app/ogg/dirchk/ETHT.cpe
+Process file         /u01/app/ogg/dirpcs/ETHT.pce
+Error log            /u01/app/ogg/ggserr.log

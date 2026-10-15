@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{% block title %}Điều khiển &mdash; ggadmin{% endblock %}
+{% block body %}
+<h3>Điều khiển tiến trình</h3>
+
+{% if s.read_only %}
+<p><small class="muted">Ngưỡng chuyển sang chỉ đọc là <strong>hằng số trong
+code</strong>, có ý không cho cấu hình từ giao diện: một chốt an toàn mà nới
+lỏng được từ giao diện thì không phải chốt.</small></p>
+{% endif %}
+
+<table role="grid">
+<thead><tr>
+  <th>Luồng</th><th>Vai</th><th>Tiến trình</th><th>Trạng thái</th>
+  <th>Chậm sau</th><th>TABLE/MAP</th><th>Thao tác</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+  <td>{{ r.luong }}</td>
+  <td><small class="muted">{{ r.vai }}</small></td>
+  <td><code>{{ r.name }}</code></td>
+  <td class="{{ 'ok' if r.status == 'RUNNING' else 'bad' }}">{{ r.status }}</td>
+  <td>{{ r.lag_s|hms if r.lag_s is not none else '-' }}</td>
+  <td class="{{ 'lech' if r.n_table != r.n_map else '' }}">
+    <small>{{ r.n_table }}/{{ r.n_map }}</small></td>
+  <td>
+    <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+      <input type="hidden" name="op" value="{{ 'STOP' if r.status == 'RUNNING' else 'START' }}">
+      <input type="hidden" name="target" value="{{ r.name }}">
+      <input type="text" name="reason" placeholder="lý do (từ 10 ký tự)"
+             required minlength="10" style="width:16rem;display:inline-block">
+      <button type="submit" class="outline">
+        {{ 'Dừng' if r.status == 'RUNNING' else 'Chạy' }}</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+<h4>Thêm bảng vào luồng đang chạy &mdash; thứ tự là hằng số</h4>
+<p><small class="muted">
+Chuỗi đúng: <code>dừng Replicat</code> &rarr; <code>chạy lại Extract</code>
+&rarr; <code>chạy Replicat</code>. Đảo lại thành &laquo;chạy lại Extract
+trước&raquo; là <strong>mất dữ liệu im lặng</strong>: Extract nạp tham số mới và
+ghi redo của bảng mới vào trail, Replicat cũ chưa có dòng <code>MAP</code> nên
+bỏ qua bản ghi đó <strong>mà vẫn dời mốc checkpoint</strong>. Không có dòng
+discard, không có log, <code>info all</code> vẫn RUNNING lag 0. Vì thế giao diện
+không có chỗ đảo thứ tự.
+</small></p>
+
+<table role="grid">
+<thead><tr><th>Luồng</th><th>TABLE / MAP</th><th>Thao tác</th></tr></thead>
+<tbody>
+{% for ten, st in cfg.streams.items() %}
+{% set r = rows|selectattr("luong", "equalto", ten)|first %}
+<tr>
+  <td><code>{{ ten }}</code> &mdash; <small>{{ st.extract }} / {{ st.replicat }}</small></td>
+  <td class="{{ 'lech' if r and r.n_table != r.n_map else '' }}">
+    {{ r.n_table if r else '?' }} / {{ r.n_map if r else '?' }}
+    {% if r and r.n_table > r.n_map %}
+    <br><small class="bad">Extract có {{ r.n_table - r.n_map }} bảng không có
+      MAP &mdash; chạy lại lúc này là mất dữ liệu im lặng</small>
+    {# Dat nut khoi phuc NGAY TAI CHO co van de. Dong canh bao ben tren noi
+       "chay lai luc nay la mat du lieu" ma nut duy nhat ben canh la "Chay
+       lai dung thu tu" thi nguoi dung phai tu suy ra la DUNG bam - trong
+       luc dang co su co. Nut dung phai o ngay day. #}
+    <br>{{ nut_khoiphuc(ten, gon=true) }}
+    {% endif %}
+  </td>
+  <td>
+    <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+      <input type="hidden" name="op" value="RESTART_ADD_TABLE">
+      <input type="hidden" name="target" value="{{ ten }}">
+      <input type="text" name="reason" placeholder="lý do (từ 10 ký tự)"
+             required minlength="10" style="width:16rem;display:inline-block">
+      <button type="submit" class="contrast outline">Chạy lại đúng thứ tự (L2)</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+<div id="khung"></div>
+
+<article>
+  <header><strong>Khôi phục an toàn</strong> &mdash; khi một luồng đang ở
+    trạng thái nửa vời</header>
+  <p>Dùng khi một bước quy trình vừa lỗi, hoặc khi anh thấy luồng có vẻ không
+    đúng mà chưa rõ phải chạy hay dừng cái gì trước. Công cụ
+    <strong>khám trước</strong> và hiện rõ kế hoạch, rồi mới chạy khi anh xác
+    nhận.</p>
+  <p>
+    {% for luong in cfg.streams %}{{ nut_khoiphuc(luong, gon=true) }}{% endfor %}
+  </p>
+  <p><small class="muted">Thứ tự ưu tiên: <strong>1. không mất dữ liệu &rarr;
+    2. luồng chạy lại được &rarr; 3. độ trễ nhỏ</strong>. Mục 1 và 3 xung đột
+    nhau: khi số dòng <code>TABLE</code> nhiều hơn số dòng <code>MAP</code>,
+    cách giảm độ trễ nhanh nhất là cho Replicat chạy &mdash; nhưng Replicat
+    lúc đó <strong>bỏ qua</strong> bản ghi của bảng thiếu <code>MAP</code>
+    mà <strong>vẫn dời mốc checkpoint</strong>: mất dữ liệu không discard,
+    không log, không dấu vết. Nên trong tình huống đó công cụ
+    <strong>dừng cả hai</strong> và chờ anh thêm dòng <code>MAP</code>.
+    <br>Nó chỉ chạy hoặc dừng tiến trình &mdash; không sửa tham số, không
+    <code>TRUNCATE</code>, không chạm mốc checkpoint. Mọi việc nó làm đều
+    đảo ngược được bằng một cú bấm.</small></p>
+</article>
+
+<h4>Những gì công cụ KHÔNG làm, có chủ ý</h4>
+<ul><small>
+<li>Dừng Manager &mdash; Manager dừng thì mọi tiến trình mất người giám sát và
+  không tự khởi động lại.</li>
+<li>Dừng cưỡng bức (<code>FORCESTOP</code>) &mdash; cắt ngang giữa một giao dịch
+  đang áp, để lại mốc checkpoint không khớp trạng thái thật của DB đích.</li>
+<li>Dời mốc checkpoint (<code>ALTER EXTRACT ... BEGIN|EXTSEQNO|EXTRBA</code>)
+  &mdash; nhảy mốc là mất dữ liệu <strong>im lặng</strong>.
+  <code>EXTSEQNO</code> còn nguy hơn <code>BEGIN NOW</code>.</li>
+<li>Mọi ký tự thay thế <code>*</code> trong tên tiến trình.</li>
+<li>Khởi động / tắt DB &mdash; để nguyên quy trình làm tay.</li>
+</small></ul>
+{% endblock %}

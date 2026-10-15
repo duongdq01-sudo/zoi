@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Quy trình &mdash; ggadmin{% endblock %}
+{% block body %}
+<h3>Quy trình từng bước</h3>
+
+<article>
+<p><small class="muted">
+<strong>Tiến độ lưu ở server, không lưu ở browser.</strong> Không phải tiện
+nghi mà là bắt buộc đúng nghiệp vụ: có bước nạp dài hàng chục phút và bước chờ
+mốc <code>Low WM</code> vượt <code>MAXSCN</code>. Lưu ở browser thì mất trắng
+khi đứt đường hầm hoặc bấm F5. Lưu ở server thì hôm sau mở lại vẫn đang ở bước
+8, và <strong>một người khác tiếp được việc của người trước</strong>.
+<br><br>
+Mỗi bước có 4 phần cố định: <em>điều kiện vào &rarr; xem trước lệnh &rarr; chạy
+&rarr; kiểm chứng</em>. <strong>Không bước nào chạy khi bước trước chưa
+xong</strong> &mdash; đó là luật của bộ máy, không phải quy ước của từng bước.
+Và <strong>một luồng chỉ một quy trình</strong> cùng lúc.
+</small></p>
+</article>
+
+<h4>Phiên đang mở / đã chạy</h4>
+<table role="grid">
+<thead><tr><th>#</th><th>Loại</th><th>Bảng</th><th>Luồng</th><th>Trạng thái</th>
+  <th>Bước</th><th>Bởi</th><th>Mốc SCN</th><th></th></tr></thead>
+<tbody>
+{% for r in runs %}
+<tr>
+  <td>{{ r.id }}</td>
+  <td><code>{{ r.kind }}</code></td>
+  <td><code>{{ r.src_table }}</code>{% if r.src_tables and (r.src_tables | from_json | length) > 1 %}
+    <small class="muted">+{{ (r.src_tables | from_json | length) - 1 }} bảng (một lô)</small>{% endif %}</td>
+  <td>{{ r.stream }}</td>
+  <td class="{{ 'ok' if r.state == 'DONE' else ('warn' if r.state == 'OPEN' else 'muted') }}">
+    {{ 'xong' if r.state == 'DONE' else ('đang mở' if r.state == 'OPEN' else 'đã bỏ') }}</td>
+  <td>{{ r.cur_step }}</td>
+  <td><small>{{ r.created_by }}</small></td>
+  <td><small>
+    {% if r.scn_floor %}ngưỡng dưới {{ r.scn_floor|songuyen }}{% endif %}
+    {% if r.maxscn %}<br>mốc nạp {{ r.maxscn|songuyen }}{% endif %}
+  </small></td>
+  <td><a href="/wizard/{{ r.id }}" role="button" class="outline">Mở</a></td>
+</tr>
+{% endfor %}
+{% if not runs %}
+<tr><td colspan="9"><small class="muted">Chưa có phiên nào.</small></td></tr>
+{% endif %}
+</tbody></table>
+
+<h4>Bước 1 &mdash; Đăng ký bảng mới vào danh sách quản lý</h4>
+<article>
+<p><small class="muted">
+Danh sách này <strong>vừa</strong> là danh mục đối chiếu, <strong>vừa</strong>
+là <strong>chốt chặn cuối</strong> chống SQL injection: bảng tồn tại trong
+<code>ODS</code> nhưng ngoài phạm vi GoldenGate thì công cụ <strong>không được
+chạm</strong>. Vì thế thêm một bảng vào đây là một thao tác <strong>có ghi
+vết</strong>, không phải tác dụng phụ của việc mở quy trình. Công cụ kiểm bảng
+có THẬT ở nguồn <code>KT_BSH</code> trước khi nhận.
+<br><br>
+Bảng chưa có ở <code>ODS</code> cũng đăng ký được &mdash; quy trình
+<code>ADD_TABLE</code> sẽ <strong>tạo bảng đích ở bước 3</strong> từ cấu trúc
+bảng nguồn.
+</small></p>
+<form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+  <input type="hidden" name="op" value="REGISTRY_ADD">
+  <div class="grid">
+    <input type="text" name="target" required
+           placeholder="TÊN BẢNG (ví dụ: HT_MA_KVUC)"
+           style="text-transform:uppercase">
+    <select name="stream_sel" required onchange="this.form.payload.value=this.value">
+      {% for sid, st in cfg.streams.items() %}
+      <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit">Đăng ký</button>
+  </div>
+</form>
+</article>
+
+<div class="grid">
+<article>
+  <header><strong>Thêm bảng vào luồng đang chạy</strong>
+    <small class="muted">(ADD_TABLE)</small></header>
+  <p><small class="muted">23 bước. Dùng cho bảng <strong>chưa có dòng
+  MAP</strong>. Thứ tự <code>dừng Replicat</code> &rarr;
+  <code>chạy lại Extract</code> &rarr; <code>chạy Replicat</code> là
+  <strong>hằng số trong code</strong>, giao diện không có chỗ đảo.</small></p>
+  <p><small class="muted"><strong>Chọn nhiều bảng</strong> (giữ Ctrl hoặc Shift)
+  để làm cả lô trong <strong>một cửa sổ bảo trì</strong>. Cả lô nạp ở
+  <strong>đúng một thời điểm</strong> &mdash; bắt buộc khi các bảng có quan hệ
+  chứng từ&ndash;chi tiết, vì nạp ở thời điểm khác nhau sẽ sinh ra dòng chi tiết
+  mà dòng gốc chưa có ở đích.</small></p>
+  <form method="post" action="/wizard/new" x-data="{ n: 0 }">
+    <input type="hidden" name="kind" value="ADD_TABLE">
+    <select name="stream" required>
+      {% for sid, st in cfg.streams.items() %}
+      <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
+      {% endfor %}
+    </select>
+    <select name="src_table" required multiple size="10"
+            @change="n = $el.selectedOptions.length">
+      {% for t in them %}
+      <option value="{{ t.src_table }}">{{ t.src_table }}
+        ({{ 'đã TRANDATA' if t.prepared else 'chưa TRANDATA' }},
+         {{ 'có TABLE' if t.in_extract else 'chưa TABLE' }},
+         {{ 'có MAP' if t.has_map else 'chưa MAP' }})</option>
+      {% endfor %}
+    </select>
+    <small class="muted" x-show="n > 1">
+      Đã chọn <strong x-text="n"></strong> bảng &mdash; sẽ chạy thành
+      <strong>một lô</strong>: một cửa sổ bảo trì, một thời điểm nạp.
+    </small>
+    <button type="submit" {{ '' if them else 'disabled' }}>Mở quy trình thêm bảng</button>
+    {% if not them %}
+    <small class="ok">Mọi bảng đang quản lý đã đủ cả 3 nguồn &mdash; không có
+      bảng nào cần thêm.</small>
+    {% endif %}
+  </form>
+</article>
+
+<article>
+  <header><strong>Đồng bộ lại bảng đã lệch</strong>
+    <small class="muted">(RESYNC_TABLE)</small></header>
+  <p><small class="muted">15 bước. Bước 1 <em>&laquo;bảng có THỰC SỰ
+  lệch?&raquo;</em> là <strong>bắt buộc, không bỏ qua được</strong>: chốt này
+  tồn tại vì sai lầm đó đã xảy ra thật &mdash; nạp lại một bảng không hề lệch.
+  Khác với thêm bảng mới: <strong>giữ index hoạt động</strong> và đối chiếu hai
+  lần. Mỗi phiên <strong>một bảng</strong>, vì bước xoá bảng đích không hoàn tác
+  được.</small></p>
+  <form method="post" action="/wizard/new">
+    <input type="hidden" name="kind" value="RESYNC_TABLE">
+    <select name="stream" required>
+      {% for sid, st in cfg.streams.items() %}
+      <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
+      {% endfor %}
+    </select>
+    <select name="src_table" required>
+      <option value="">-- bảng đã có dòng MAP --</option>
+      {% for t in resync %}
+      <option value="{{ t.src_table }}">{{ t.stream }} / {{ t.src_table }}{% if t.handlecollisions %} (còn chống trùng){% endif %}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="contrast outline">Mở quy trình đồng bộ lại</button>
+  </form>
+</article>
+</div>
+
+<h4>Tạo luồng mới &mdash; Extract + Replicat mới</h4>
+<article class="xacnhan">
+<p><small>
+<strong class="bad">Luồng nguy hiểm nhất của cả công cụ.</strong> Nó đăng ký một
+tiến trình đọc redo vào <strong>DB nguồn production</strong>. Nếu dọn sai thì để
+lại tiến trình <strong>mồ côi</strong> đọc redo <strong>vĩnh viễn</strong> và
+giữ archive log không cho xoá.
+</small></p>
+
+<p><small class="muted">
+13 bước, <strong>thứ tự là hằng số</strong>. Hai chỗ dễ đảo nhất và cả hai đã
+từng sai: <code>REGISTER EXTRACT</code> phải <strong>trước</strong>
+<code>ADD EXTRACT</code>; <code>ADD CHECKPOINTTABLE</code> phải
+<strong>trước</strong> <code>ADD REPLICAT</code> (file <code>GLOBALS</code> rỗng
+nên không có <code>CHECKPOINTTABLE</code> mặc định, mà cú pháp lại bắt buộc
+chọn).
+<br><br>
+<strong>Hai việc công cụ KHÔNG làm, có chủ ý:</strong> không tự chạy
+<code>ALTER SYSTEM SET streams_pool_size</code> (chỉ kiểm tra rồi sinh lệnh cho
+người chạy tay), và <strong>không tự đặt tên</strong> &mdash; người dùng gõ,
+công cụ kiểm trùng với 6 tiến trình + 3 trail + 3 bảng checkpoint đang có.
+<br><br>
+<strong>Tối đa MỘT phiên tạo luồng mới cùng lúc</strong> trên toàn hệ.
+</small></p>
+
+<form method="post" action="/wizard/new">
+  <input type="hidden" name="kind" value="NEW_STREAM">
+  <label>Bảng đầu tiên của luồng mới
+    <select name="src_table" required>
+      <option value="">-- bảng chưa thuộc luồng nào --</option>
+      {% for t in moi %}
+      <option value="{{ t.src_table }}">{{ t.src_table }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <small class="muted">Tên Extract / Replicat / tiền tố trail sẽ gõ ở
+    <strong>bước 2</strong>, sau khi các điều kiện tiên quyết đã đạt.</small>
+  <button type="submit" class="contrast" {{ '' if moi else 'disabled' }}>
+    Mở quy trình tạo luồng mới</button>
+  {% if not moi %}
+  <small class="ok">Mọi bảng đang quản lý đều đã thuộc một luồng &mdash; không
+    có bảng nào để làm bảng đầu tiên của luồng mới.</small>
+  {% endif %}
+</form>
+</article>
+
+<h4>Khi cần dọn một luồng mới vừa tạo</h4>
+<p><small class="muted">
+Mở một phiên tạo luồng mới rồi vào trang phiên để thấy nút dọn. Phần dọn chạy
+<strong>đủ các lệnh, theo thứ tự cố định</strong>, và
+<code>UNREGISTER EXTRACT ... DATABASE</code> là bước <strong>không thể bỏ
+qua</strong> &mdash; <code>DELETE EXTRACT</code> mà quên
+<code>UNREGISTER</code> thì để lại tiến trình đọc redo mồ côi giữ archive log
+<strong>mãi mãi</strong>. Tương tự, <code>DELETE REPLICAT</code> mà quên đăng
+nhập DB trước thì để lại inbound server <code>OGG$&lt;R&gt;</code> mồ côi
+<strong>vẫn giữ streams pool</strong>.
+</small></p>
+
+<div id="khung"></div>
+{% endblock %}

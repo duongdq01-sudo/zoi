@@ -1,0 +1,72 @@
+{% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{# Ket qua mot thao tac ghi. Da co mot dong audit truoc khi den day. #}
+<article class="xacnhan {{ '' if ok else 'l1' }}">
+  <header>
+    <strong class="{{ 'ok' if ok else 'bad' }}">{{ 'ĐẠT' if ok else 'KHÔNG ĐẠT' }}</strong>
+    &mdash; {{ nhan }}{% if p.target %} <code>{{ p.target }}</code>{% endif %}
+    <small class="muted">({{ p.level }}, bởi {{ p.user }})</small>
+  </header>
+
+  <p>{{ msg }}</p>
+
+  {#
+    KHI LOI: dua nut KHOI PHUC AN TOAN ra ngay, TRUOC ca phan chi tiet loi.
+
+    Thu tu nay co y. Luc mot buoc vua loi, he thong co the dang o trang
+    thai nua voi - Replicat da dung, Extract co the da chay lai. Viec dau
+    tien can lam KHONG phai la doc loi, ma la dua luong ve trang thai an
+    toan; doc loi va sua la viec THU HAI. Dat nut o duoi phan chi tiet la
+    xep sai thu tu uu tien ngay trong giao dien.
+  #}
+  {% if not ok and luong_loi %}
+  <article class="xacnhan l2" style="margin:.6rem 0">
+    <strong class="bad">Trước khi tìm nguyên nhân: đưa luồng về an toàn</strong>
+    <p><small>Bước vừa lỗi có thể đã để luồng <code>{{ luong_loi }}</code> ở
+      trạng thái nửa vời. Chạy khôi phục an toàn trước, rồi mới xem lỗi ở
+      đâu và khắc phục.</small></p>
+    {{ nut_khoiphuc(luong_loi) }}
+  </article>
+  {% endif %}
+
+  {% if chi_tiet %}
+  <details>
+    <summary><small>Kết quả chi tiết ({{ chi_tiet|length }} dòng)</small></summary>
+    <pre class="diff">{% for l in chi_tiet %}{{ l }}
+{% endfor %}</pre>
+  </details>
+  {% endif %}
+
+  <p><small class="muted">Đã ghi vết thao tác: <code>{{ p.level }} {{ p.action }}</code>
+    trên <code>{{ p.target or '-' }}</code>. Xem <a href="/audit">Vết thao tác</a>
+    &mdash; mỗi bản ghi có <code>prev_hash</code> nối thành chuỗi.</small></p>
+
+  {#
+    DUONG DI TIEP - bat buoc phai co, khong phai tien nghi.
+
+    Khung ket qua nay duoc htmx nhet vao `#khung`, nen phan con lai cua
+    trang GIU NGUYEN trang thai cu: the "Buoc hien tai" phia tren van la
+    buoc VUA CHAY. Khong co link quay lai thi nguoi dung chay xong mot buoc
+    la KET - thay buoc cu, khong thay buoc moi, va khong hieu tai sao.
+    Da xay ra that: chay xong buoc 1 cua quy trinh #4 roi khong di tiep
+    duoc. Loi khong lo ra suot thoi gian truoc do vi cac lan chay deu goi
+    API, chua lan nao bam bang giao dien.
+  #}
+  {% set rid = (p.target or '').split(':')[0]
+     if p.action in ('WIZARD_STEP', 'WIZARD_ROLLBACK') else '' %}
+  <p>
+    {% if rid %}
+    <a href="/wizard/{{ rid }}" role="button">
+      {{ 'Sang bước tiếp theo' if ok else 'Về quy trình để xem lại' }}</a>
+    {% endif %}
+    {% if p.action == 'VERIFY_SNAPSHOT' %}
+    <a href="/verify" role="button">Theo dõi việc đối chiếu</a>
+    {% endif %}
+    <a href="/control" role="button" class="secondary outline">Điều khiển</a>
+    <a href="/" role="button" class="secondary outline">Tổng quan</a>
+  </p>
+  {% if rid and ok %}
+  <p><small class="muted">Trang chưa tự chuyển sang bước mới &mdash; thẻ
+    &laquo;Bước hiện tại&raquo; phía trên vẫn là bước vừa chạy. Bấm nút trên
+    để tải lại quy trình.</small></p>
+  {% endif %}
+</article>

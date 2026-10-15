@@ -1,0 +1,146 @@
+{#
+  Khung chung. Menu doc ben TRAI, thanh tren dinh, than trang o giua.
+
+  ICON: inline SVG line-icon theo design-system.md muc 7 - KHONG emoji
+  (emoji lech net, da mau, khong dieu khien duoc mau bang CSS). Net ve
+  dung `currentColor` nen doi mau theo trang thai ma khong sua SVG.
+
+  TO SANG TRANG DANG MO: so `request.url.path` voi duong dan cua muc. So
+  khop TIEN TO cho trang con (vi du /wizard/3 van sang muc "Quy trinh"),
+  rieng muc "/" phai so khop TUYET DOI, khong thi no sang o moi trang.
+#}
+{% set p = request.url.path %}
+{% macro muc(duong, nhan, icon, so=None, khop_tuyet_doi=False) %}
+  {% set dang = (p == duong) if khop_tuyet_doi else p.startswith(duong) %}
+  <a href="{{ duong }}" class="{{ 'dang' if dang else '' }}"
+     {% if dang %}aria-current="page"{% endif %}>
+    {{ icon }}<span>{{ nhan }}</span>
+    {% if so is not none %}
+    <span class="so {{ 'co' if so else '' }}">{{ so }}</span>
+    {% endif %}
+  </a>
+{% endmacro %}
+
+{# --- bo icon, viewBox 24, fill none, stroke-width 1.8 (design-system 7) --- #}
+{% set i_tongquan %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>{% endset %}
+{% set i_bang %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>{% endset %}
+{% set i_doichieu %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11l-3-3M20 17H9l3 3"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="17" r="2"/></svg>{% endset %}
+{% set i_nhanh %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13h5l-1 8 8-10h-5z"/></svg>{% endset %}
+{% set i_quytrinh %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1.5 1.5L8 4"/><path d="M4 12l1.5 1.5L8 10.5"/><circle cx="5.5" cy="19" r="1.5"/></svg>{% endset %}
+{% set i_dieukhien %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h7M15 7h5M4 17h3M11 17h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>{% endset %}
+{% set i_thamso %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>{% endset %}
+{% set i_viec %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>{% endset %}
+{% set i_lichsu %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>{% endset %}
+{% set i_log %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>{% endset %}
+{% set i_canhbao %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>{% endset %}
+{% set i_vet %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>{% endset %}
+{% set i_huongdan %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.8 9.3a2.3 2.3 0 1 1 3.4 2.1c-.8.5-1.2 1-1.2 1.9"/><path d="M12 17h.01"/></svg>{% endset %}
+<!doctype html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ggadmin{% endblock %}</title>
+<link rel="stylesheet" href="/static/vendor/pico.min.css">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/htmx.min.js" defer></script>
+{# Alpine chi de UI thuan client (bo dem "da chon N bang" o trang Quy trinh).
+   No da duoc vendor san tu dau nhung KHONG he duoc nap, nen cac thuoc tinh
+   `x-data`/`x-show`/`x-text` trong wizard.html im lang khong lam gi. Alpine
+   chi tac dong len element co `x-data`, nen nap toan cuc khong anh huong
+   trang nao khac. #}
+<script src="/static/vendor/alpine.min.js" defer></script>
+</head>
+<body>
+{# Trang dang nhap khong co menu -> luoi mot cot, khong de trong 15rem #}
+<div class="khung {{ '' if user else 'mot-cot' }}">
+
+{% if user %}
+<aside class="ben">
+  <div class="ben-hieu">
+    <span class="dau" aria-hidden="true">gg</span>
+    <span>
+      <span class="ten">ggadmin</span><br>
+      <span class="phu">GoldenGate &middot; BSH</span>
+    </span>
+  </div>
+
+  <nav aria-label="Menu chính">
+    <div class="nhom">Theo dõi</div>
+    {{ muc('/',         'Tổng quan',  i_tongquan, khop_tuyet_doi=True) }}
+    {{ muc('/tables',   'Bảng',       i_bang) }}
+    {{ muc('/verify',   'Đối chiếu',  i_doichieu) }}
+    {{ muc('/history',  'Lịch sử',    i_lichsu) }}
+
+    <div class="nhom">Thao tác</div>
+    {{ muc('/nhanh',    'Thao tác nhanh', i_nhanh) }}
+    {{ muc('/wizard',   'Quy trình',  i_quytrinh) }}
+    {{ muc('/control',  'Điều khiển', i_dieukhien) }}
+    {{ muc('/params',   'Tham số',    i_thamso) }}
+    {{ muc('/jobs',     'Việc chạy',  i_viec) }}
+
+    <div class="nhom">Chẩn đoán</div>
+    {{ muc('/logs',     'Log',        i_log) }}
+    {{ muc('/notify',   'Cảnh báo',   i_canhbao, so=(s.alerts | length) if s else 0) }}
+    {% if user.role == 'ADMIN' %}
+    {{ muc('/audit',    'Vết thao tác', i_vet) }}
+    {% endif %}
+    {{ muc('/huongdan', 'Hướng dẫn',  i_huongdan) }}
+  </nav>
+
+  <div class="ben-chan">
+    <div class="ai">{{ user.username }}</div>
+    <div>{{ user.role }}</div>
+    <a href="/logout">Thoát</a>
+  </div>
+</aside>
+{% endif %}
+
+<div class="chinh">
+  {% if user %}
+  <header class="tren">
+    <div>
+      {# Ten trang lay tu <title>, cat phan " &mdash; ggadmin" o duoi. Nho
+         vay moi trang chi khai ten o MOT cho, khong phai hai. #}
+      <h1>{% block ten_trang %}{{ self.title().split('&mdash;')[0].strip() }}{% endblock %}</h1>
+      {% block mo_ta_trang %}{% endblock %}
+    </div>
+    <div class="phai">
+      {% if s and s.read_only %}
+      <span class="bad"><strong>CHỈ ĐỌC</strong></span>
+      {% endif %}
+      <span class="nhip">
+        <span class="den {{ 'nguy' if (s and (s.alerts or not s.ts)) else '' }}"
+              aria-hidden="true"></span>
+        {% if s and s.ts %}
+          {{ s.procs | selectattr('is_running') | list | length }}/{{ s.procs | length }} tiến trình
+          &middot; đo {{ s.age_s }}s trước
+        {% else %}
+          chưa đo được
+        {% endif %}
+      </span>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="than">
+    {% if s and s.read_only %}
+    <article style="border-left:5px solid var(--danger)">
+      <strong class="bad">CHẾ ĐỘ CHỈ ĐỌC TOÀN CỤC</strong>
+      &mdash; đĩa <code>/</code> xuống dưới ngưỡng an toàn, mọi thao tác ghi
+      đang bị tắt. Dọn đĩa thì công cụ tự mở lại.
+    </article>
+    {% endif %}
+    {% block body %}{% endblock %}
+  </main>
+
+  <footer class="chan">
+    Mọi thao tác ghi đều qua khung xác nhận L1/L2 và phần kiểm tra trước khi
+    chạy. Đo lại mỗi {{ cfg.poll_seconds if cfg else '?' }}s.
+    Bind 127.0.0.1 + đường hầm SSH.
+  </footer>
+</div>
+
+</div>
+</body>
+</html>

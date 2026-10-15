@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{% block title %}Quy trình #{{ run.id }} &mdash; ggadmin{% endblock %}
+{% block body %}
+{#
+  CO BUOC LOI -> dua nut khoi phuc an toan len DAU TRANG, truoc moi thu
+  khac. Khi mot buoc loi, he co the dang o trang thai nua voi (Replicat da
+  dung, Extract co the da chay lai). Viec dau tien KHONG phai doc loi ma la
+  dua luong ve an toan; tim nguyen nhan la viec thu hai.
+#}
+{% set buoc_loi = buoc | selectattr('state', 'equalto', 'FAIL') | list %}
+{% if buoc_loi %}
+<article class="xacnhan l2" style="border-left:5px solid var(--danger)">
+  <header><strong class="bad">Có bước lỗi &mdash; làm việc này trước</strong></header>
+  <p>Bước
+    {% for b in buoc_loi %}<code>{{ '%02d'|format(b.step_no) }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+    đang ở trạng thái lỗi, nên luồng <code>{{ run.stream }}</code> có thể đang
+    ở trạng thái nửa vời: Replicat đã dừng, Extract có thể đã chạy lại.</p>
+  {{ nut_khoiphuc(run.stream) }}
+  <p style="margin-top:.5rem"><small class="muted">Chạy xong cái này thì
+    luồng đã an toàn &mdash; lúc đó mới bình tĩnh xem lỗi ở bước nào và khắc
+    phục. Nút này <strong>không</strong> sửa gì trong quy trình: phiên vẫn ở
+    đúng bước đang dừng, bấm lại bước đó sau khi khắc phục là chạy tiếp.</small></p>
+</article>
+{% endif %}
+
+<h3>Quy trình #{{ run.id }} &mdash; <code>{{ run.kind }}</code>
+  {% if ds_bang | length > 1 %}
+  trên <strong>LÔ {{ ds_bang | length }} BẢNG</strong>
+  {% else %}
+  trên <code>{{ run.src_owner }}.{{ run.src_table }}</code>
+  {% endif %}</h3>
+
+{% if ds_bang | length > 1 %}
+<article>
+  <header><strong>Lô {{ ds_bang | length }} bảng</strong> &mdash; một cửa sổ
+    bảo trì, <strong>một thời điểm nạp</strong></header>
+  <p>{% for b in ds_bang %}<code>{{ b }}</code>{% if not loop.last %} &middot;
+    {% endif %}{% endfor %}</p>
+  <p><small class="muted">Cả {{ ds_bang | length }} bảng nạp ở <strong>đúng một
+    <code>AS OF SCN</code></strong>. Bảng có quan hệ chứng từ&ndash;chi tiết mà
+    nạp ở thời điểm khác nhau sẽ sinh ra dòng chi tiết không có dòng gốc ở đích.
+    <br>Những bước chạy <strong>theo từng bảng</strong>:
+    {% for b in moi_bang | sort %}<code>{{ b }}</code>{% if not loop.last %}
+    {% endif %}{% endfor %}. Một bảng lỗi là <strong>cả bước báo lỗi</strong>;
+    các bảng đã xong giữ nguyên, bấm lại sẽ chạy tiếp từ bảng bị lỗi.
+  </small></p>
+</article>
+{% endif %}
+
+<div class="kv">
+  <b>Luồng</b><span>{{ run.stream }} &mdash;
+    {{ cfg.streams[run.stream].extract }} / {{ cfg.streams[run.stream].replicat }}</span>
+  <b>Đích</b><span>{% if ds_bang | length > 1 %}<code>{{ run.tgt_owner }}</code>
+    &mdash; {{ ds_bang | length }} bảng{% else %}<code>{{ run.tgt_owner }}.{{ run.tgt_table }}</code>{% endif %}</span>
+  <b>Trạng thái</b><span class="{{ 'ok' if run.state == 'DONE' else 'warn' }}">
+    {{ 'xong' if run.state == 'DONE' else ('đang mở' if run.state == 'OPEN' else 'đã bỏ') }}</span>
+  <b>KEYCOLS</b><span>{% if ds_bang | length > 1 %}<small class="muted">mỗi bảng
+    một bộ khoá riêng &mdash; xem kết quả bước xác nhận KEYCOLS</small>
+    {% else %}{{ run.keycols or '(chưa xác nhận)' }}{% endif %}</span>
+  <b>Ngưỡng dưới (SCN_FLOOR)</b>
+  <span>{{ run.scn_floor|songuyen if run.scn_floor else '-' }}
+    <small class="muted">mốc High Watermark lúc dừng &mdash; dữ liệu nạp không
+    được cũ hơn mốc này</small></span>
+  <b>Mốc nạp (MAXSCN)</b><span>{{ run.maxscn|songuyen if run.maxscn else '-' }}
+    <small class="muted">thời điểm của đợt nạp &mdash; chờ Low WM vượt mốc này
+    mới bỏ được chế độ chống trùng</small></span>
+  {% if run.rows_before_truncate is not none %}
+  <b>Số dòng trước khi xoá</b><span>{{ run.rows_before_truncate|songuyen }}</span>
+  {% endif %}
+  <b>Mở bởi</b><span>{{ run.created_by }} lúc {{ run.created_at|hhmm }}</span>
+</div>
+
+<h4>Các bước</h4>
+<table role="grid">
+<thead><tr><th>#</th><th>Bước</th><th>Mức</th><th>Trạng thái</th><th>Bởi</th>
+  <th>Lý do</th></tr></thead>
+<tbody>
+{% for b in buoc %}
+<tr {% if b.step_no == cur %}style="outline:2px solid var(--pico-primary)"{% endif %}>
+  <td>{{ b.step_no }}</td>
+  <td>
+    {{ b.nhan }}
+    {% if b.ghi_chu %}<br><small class="muted">{{ b.ghi_chu }}</small>{% endif %}
+    {% if b.output %}
+    <details><summary><small>kết quả chi tiết</small></summary>
+      <pre class="diff">{{ b.output }}</pre></details>
+    {% endif %}
+    {% if b.err_msg %}<br><small class="bad">{{ b.err_msg }}</small>{% endif %}
+  </td>
+  <td><code>{{ b.level }}</code></td>
+  <td class="{{ 'ok' if b.state == 'PASS' else ('bad' if b.state == 'FAIL' else ('warn' if b.state == 'DANG' else 'muted')) }}">
+    {{ {'PASS': 'xong', 'FAIL': 'lỗi', 'DANG': 'đang chạy',
+        'CHO': 'chờ', 'BO_QUA': 'bỏ qua'}.get(b.state, b.state) }}</td>
+  <td><small>{{ b.by_user or '' }}</small></td>
+  <td><small>{{ b.reason or '' }}</small></td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+{% if run.state == 'OPEN' %}
+{% set b_cur = (buoc | selectattr("step_no", "equalto", cur) | first) %}
+{% if b_cur and b_cur.state == 'DANG' %}
+{# Buoc dang CHO mot job roi ra: hien trang thai job, tu cap nhat 10s #}
+<div hx-get="/wizard/{{ run.id }}/job" hx-trigger="load, every 10s"
+     hx-swap="innerHTML">
+  <article class="xacnhan l1"><em>đang đọc trạng thái việc chạy...</em></article>
+</div>
+{% endif %}
+
+<article class="xacnhan l1">
+  <header><strong>Bước hiện tại: {{ cur }} &mdash; {{ dn.nhan }}</strong>
+    <code>{{ dn.level }}</code></header>
+
+  {% if b_cur and b_cur.state == 'DANG' %}
+  <p class="warn">Bước này đang chờ một việc chạy nền xong (xem khung trên).
+    Không bấm lại được khi việc đó chưa kết thúc.</p>
+  {% elif not ok_vao %}
+  <p class="bad">Chưa đủ điều kiện để chạy bước này: {{ vi_sao }}</p>
+  {% else %}
+
+  {% if dn.ghi_chu %}<p><small class="muted">{{ dn.ghi_chu }}</small></p>{% endif %}
+
+  {% if pf %}{% include "_preflight.html" %}{% endif %}
+
+  {% if xt %}
+  <p><strong>Xem trước &mdash; lệnh / SQL / thay đổi sẽ chạy</strong></p>
+  <pre class="diff">{{ xt }}</pre>
+  {% endif %}
+
+  <form hx-post="/wizard/{{ run.id }}/arm" hx-target="#khung" hx-swap="innerHTML">
+    {% if dn.name == 'KIEM_TEN' %}
+    <div class="grid">
+      <label>Tên Extract mới
+        <input type="text" name="extract" required placeholder="ví dụ: ETBC2">
+      </label>
+      <label>Tên Replicat mới
+        <input type="text" name="replicat" required placeholder="ví dụ: RBC2">
+      </label>
+      <label>Tiền tố trail (ĐÚNG 2 ký tự thường)
+        <input type="text" name="trail_prefix" required maxlength="2"
+               minlength="2" placeholder="ví dụ: bc">
+      </label>
+      <label>Bảng checkpoint (để trống = OGG_BSH.&lt;replicat&gt;)
+        <input type="text" name="ckpt_table" placeholder="OGG_BSH.RBC2">
+      </label>
+    </div>
+    <small class="muted">Công cụ <strong>không tự đặt tên</strong>. Nó kiểm:
+      định dạng tên, không trùng 6 tiến trình / 3 trail / 3 bảng checkpoint
+      đang có, và <code>dirprm/&lt;tên&gt;.prm</code> +
+      <code>dirdat/&lt;tiền tố&gt;*</code> chưa tồn tại. Bốn tên này sau đó là
+      <strong>danh sách duy nhất</strong> mà các lệnh tạo / xoá / đăng ký của
+      phiên được chạm vào.</small>
+    {% endif %}
+
+    {% if dn.name == 'XAC_NHAN_KEYCOLS' %}
+    <label>KEYCOLS &mdash; các cột khoá, cách nhau bằng dấu phẩy
+      <input type="text" name="keycols"
+             value="{{ run.keycols or '' }}"
+             placeholder="để trống nếu bảng có khoá chính thật">
+    </label>
+    <small class="muted"><strong>Để trống được</strong> nếu bảng có khoá chính
+      thật: công cụ lấy đúng các cột của khoá chính đó, vì gõ lại bằng tay chỉ
+      thêm một cơ hội gõ sai. Bảng <strong>không</strong> có khoá chính thì bắt
+      buộc phải nhập.
+      <br>Dù nhập hay suy ra, công cụ vẫn kiểm tính <strong>duy nhất trên dữ
+      liệu thật</strong> (không tin vào cấu trúc khai báo, vì ở nguồn khoá chính
+      có thể đang bị tắt) và <strong>đếm số dòng NULL của từng cột khoá</strong>.
+      Cột khoá chứa NULL thì điều kiện <code>cột = NULL</code> không bao giờ
+      đúng &rarr; Replicat không tìm thấy dòng &rarr; bản ghi bị bỏ
+      <strong>im lặng</strong> vào file discard.</small>
+    {% endif %}
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" {% if pf and not pf.ok %}disabled{% endif %}
+            class="{{ 'contrast' if dn.level == 'L2' else '' }}">
+      {% if pf and not pf.ok %}Kiểm tra trước không đạt &mdash; không chạy được
+      {% else %}Xem xác nhận rồi chạy bước {{ cur }}{% endif %}
+    </button>
+  </form>
+  {% endif %}
+</article>
+
+<div id="khung"></div>
+
+{% if run.kind == 'NEW_STREAM' and run.created_extract %}
+<article class="xacnhan">
+  <header><strong class="bad">DỌN SẠCH phiên tạo luồng mới</strong>
+    <code>L2</code></header>
+  <p><small>Chạy <strong>đủ các lệnh dọn, theo thứ tự cố định</strong>:
+    dừng cả hai tiến trình &rarr; đăng nhập DB đích +
+    <code>delete replicat</code> &rarr; <code>delete checkpointtable</code>
+    &rarr; đăng nhập DB nguồn + <code>delete extract</code> &rarr;
+    <strong><code>unregister extract ... database</code></strong>, rồi xoá file
+    tham số và trail do phiên này tạo.
+    <br><br>
+    <code>UNREGISTER</code> là bước <strong>không thể bỏ qua</strong>:
+    <code>DELETE EXTRACT</code> mà quên nó thì để lại tiến trình đọc redo
+    <strong>mồ côi</strong> ở DB nguồn, vẫn giữ archive log và đọc redo vô ích
+    <strong>mãi mãi</strong>.</small></p>
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="WIZARD_ROLLBACK">
+    <input type="hidden" name="target" value="{{ run.id }}">
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do dọn (từ 10 ký tự)">
+    <button type="submit" class="contrast">Dọn sạch (sẽ phải gõ tay
+      <code>{{ run.created_extract }}</code>)</button>
+  </form>
+</article>
+{% endif %}
+
+<details>
+  <summary><small>Bỏ phiên này</small></summary>
+  <form method="post" action="/wizard/{{ run.id }}/abort">
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do bỏ phiên (từ 10 ký tự)">
+    <button type="submit" class="secondary outline">Bỏ phiên #{{ run.id }}</button>
+  </form>
+  <small class="muted">Bỏ phiên KHÔNG hoàn tác những gì đã chạy. Các bước đã
+    xong vẫn có hiệu lực trên hệ thống &mdash; đọc lại phần &laquo;kết quả chi
+    tiết&raquo; của từng bước để biết cần gỡ những gì bằng tay.</small>
+</details>
+{% else %}
+<p><a href="/wizard" role="button" class="outline">Về danh sách quy trình</a></p>
+{% endif %}
+{% endblock %}

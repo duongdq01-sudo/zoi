@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block title %}Log &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>ggserr.log</h4>
+<p>
+  <a href="/logs?chi_loi=0" role="button" class="{{ 'outline' if chi_loi }}">Tất cả</a>
+  <a href="/logs?chi_loi=1" role="button" class="{{ '' if chi_loi else 'outline' }}">Chỉ ABEND/FATAL</a>
+  <small>&nbsp;Bộ lọc đã loại <code>QU_ERROR</code> &mdash; nó CÓ CHỨA chữ
+  <code>ERROR</code> nên lọc thô sẽ báo lỗi giả.</small>
+</p>
+<pre class="log">{% for l in lines %}{{ l }}
+{% endfor %}</pre>
+
+<h4>File discard &mdash; dòng dữ liệu bị bỏ không áp được</h4>
+{% for rep, tail in dsc.items() %}
+  {% set d = s.discards.get(rep, {}) %}
+  <details {% if d.get('so_dong_la', 0) > 0 %}open{% endif %}>
+    <summary>
+      <strong>{{ rep }}.dsc</strong>
+      {{ d.get('bytes', -1) }} byte / mốc rỗng {{ d.get('baseline') }}
+      {% if d.get('so_dong_la', 0) > 0 %}<span class="bad">{{ d.so_dong_la }} dòng lạ &mdash; CÓ DỮ LIỆU BỊ BỎ</span>
+      {% else %}<span class="ok">0 dòng lạ</span>{% endif %}
+    </summary>
+    <pre class="log">{% for l in tail %}{{ l }}
+{% endfor %}</pre>
+  </details>
+{% endfor %}
+<p><small class="muted">Chỉ đếm <strong>số dòng khác dòng mở đầu</strong>, không
+đếm byte: GoldenGate ghi một dòng mở đầu mỗi lần Replicat dừng, nên file to lên
+mà không bỏ bản ghi nào. Đếm theo byte sẽ báo động mỗi lần bảo trì.</small></p>
+{% endblock %}

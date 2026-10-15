@@ -1,0 +1,106 @@
+{% extends "base.html" %}{% block title %}Bảng &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>Đối chiếu 3 nguồn sự thật</h4>
+<p><small class="muted">
+  (1) dòng <code>TABLE</code> trong Extract &nbsp;&middot;&nbsp;
+  (2) dòng <code>MAP</code> trong Replicat &nbsp;&middot;&nbsp;
+  (3) bảng đã bật TRANDATA ở nguồn (<code>dba_capture_prepared_tables</code>)
+</small></p>
+
+{% set r = recon or {} %}
+<div class="grid-3">
+  <article {% if r.get("capture_khong_map") %}style="border-left:4px solid #e74c3c"{% endif %}>
+    <strong>{{ (r.get("capture_khong_map") or [])|length }}</strong> bảng
+    <b>Extract lấy mà Replicat KHÔNG có MAP</b>
+    <p><small>Cái bẫy số một của hệ này. Extract đọc redo và ghi vào trail,
+    Replicat không có dòng MAP nên bỏ qua bản ghi <em>mà vẫn dời mốc
+    checkpoint</em> &rarr; mất dữ liệu <strong>im lặng</strong>: file discard
+    không tăng, log sạch, <code>info all</code> vẫn RUNNING lag 0.</small></p>
+    {% for x in r.get("capture_khong_map") or [] %}
+      <code>{{ x.stream or "?" }}/{{ x.src_table }}</code>
+    {% endfor %}
+  </article>
+  <article {% if r.get("map_khong_prepared") %}style="border-left:4px solid #e74c3c"{% endif %}>
+    <strong>{{ (r.get("map_khong_prepared") or [])|length }}</strong> bảng
+    <b>có MAP mà CHƯA bật TRANDATA</b>
+    <p><small>Replicat chờ mãi không có dữ liệu, hoặc khoá bị suy luận
+    sai.</small></p>
+    {% for x in r.get("map_khong_prepared") or [] %}
+      <code>{{ x.src_table }}</code>
+    {% endfor %}
+  </article>
+  <article>
+    <strong>{{ (r.get("prepared_khong_extract") or [])|length }}</strong> bảng
+    <b>đã TRANDATA mà Extract không lấy</b>
+    <p><small>Nguồn đang đọc redo vô ích cho những bảng này.</small></p>
+    {% for x in r.get("prepared_khong_extract") or [] %}
+      <code>{{ x.src_table }}</code>
+    {% endfor %}
+  </article>
+</div>
+
+<div class="grid-3">
+  <article {% if r.get("con_handlecollisions") %}style="border-left:4px solid #e67e22"{% endif %}>
+    <strong>{{ (r.get("con_handlecollisions") or [])|length }}</strong> bảng còn
+    <code>HANDLECOLLISIONS</code>
+    <p><small>Phải là 0 khi không nạp dữ liệu: nó <em>che</em> lỗi
+    thật.</small></p>
+    {% for x in r.get("con_handlecollisions") or [] %}<code>{{ x.src_table }}</code>{% endfor %}
+  </article>
+  <article>
+    <strong>{{ (r.get("thieu_keycols") or [])|length }}</strong> bảng thiếu
+    <code>KEYCOLS</code> tường minh
+    <p><small>GoldenGate sẽ tự suy luận khoá. Rủi ro với bảng không có khoá
+    chính thật.</small></p>
+    {% for x in r.get("thieu_keycols") or [] %}<code>{{ x.src_table }}</code>{% endfor %}
+  </article>
+  <article>
+    <div class="kv">
+      <b>Đủ cả 3 nguồn</b><span><strong class="ok">{{ r.get("day_du", 0) }}</strong></span>
+      <b>Tổng đang quản lý</b><span>{{ r.get("tong", 0) }}</span>
+      <b>Đã TRANDATA ở nguồn</b><span>{{ s.prepared }}</span>
+    </div>
+  </article>
+</div>
+
+<h4>Danh sách bảng</h4>
+<p>
+  <a href="/tables" role="button" class="{{ "outline" if stream }}">Tất cả</a>
+  {% for sid in cfg.streams %}
+  <a href="/tables?stream={{ sid }}" role="button"
+     class="{{ "" if stream == sid else "outline" }}">{{ sid }}</a>
+  {% endfor %}
+</p>
+<table role="grid">
+<thead><tr>
+  <th>Luồng</th><th>Bảng ở nguồn</th><th>Bảng ở đích</th><th>KEYCOLS</th>
+  <th>TABLE</th><th>MAP</th><th>TRANDATA</th><th>Chống trùng</th>
+  <th>Dòng ở nguồn</th><th>Dòng ở đích</th><th>Đối chiếu gần nhất</th>
+</tr></thead>
+<tbody>
+{% for t in rows %}
+<tr>
+  <td>{{ t.stream or "-" }}</td>
+  <td><code>{{ t.src_table }}</code></td>
+  <td>{{ t.tgt_table if t.tgt_table != t.src_table else "=" }}</td>
+  <td><small>{{ t.keycols or "-" }}</small></td>
+  <td class="{{ "ok" if t.in_extract else "bad" }}">{{ "có" if t.in_extract else "KHÔNG" }}</td>
+  <td class="{{ "ok" if t.has_map else "bad" }}">{{ "có" if t.has_map else "KHÔNG" }}</td>
+  <td class="{{ "ok" if t.prepared else "bad" }}">{{ "có" if t.prepared else "KHÔNG" }}</td>
+  <td class="{{ "warn" if t.handlecollisions else "" }}">{{ "CÒN" if t.handlecollisions else "-" }}</td>
+  <td>{{ t.src_rows|songuyen }}</td>
+  <td>{{ t.tgt_rows|songuyen }}</td>
+  <td>
+    {% if t.v_ts %}
+      <span class="{{ "ok" if t.v_matched else "bad" }}">{{ "KHỚP" if t.v_matched else "LỆCH" }}</span>
+      <small class="muted">{{ t.v_ts|hhmm }}
+        {{ "chuẩn" if t.v_mode == "SNAPSHOT_SCN" else "nhanh" }}</small>
+    {% else %}<small class="muted">chưa đối chiếu</small>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+<p><small class="muted">Danh sách này cũng là <strong>chốt chặn cuối</strong>
+chống SQL injection: bảng tồn tại trong <code>ODS</code> nhưng không nằm ở đây
+thì công cụ không được chạm vào.</small></p>
+{% endblock %}

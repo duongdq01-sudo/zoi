@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Thao tác nhanh &mdash; ggadmin{% endblock %}
+{% block body %}
+
+<article>
+<p><small class="muted">
+Hai thao tác dưới đây <strong>tự chạy hết quy trình</strong>: gõ tên bảng, ghi
+lý do, xác nhận một lần, rồi công cụ đi từng bước từ đầu đến cuối.
+<strong>Mỗi bước vẫn phải đạt mới sang bước sau</strong>; bước nào không đạt
+thì dừng ngay tại đó và nói rõ vì sao.
+</small></p>
+<p><small class="muted">
+<strong>Cái vẫn chạy nguyên:</strong> điều kiện vào của từng bước, phần kiểm
+tra trước khi chạy, và phần kiểm chứng lại trên DB sau mỗi việc chạy nền. Thứ
+tự bước vẫn là hằng số trong code.
+<br><strong>Cái được đánh đổi:</strong> bình thường mỗi bước mức L2 bắt gõ tay
+tên bảng và đọc lại màn hình. Ở đây gộp thành <strong>một lần</strong> cho cả
+lượt. Mọi chốt kỹ thuật không mất gì, nhưng sự chú ý của người ở từng bước thì
+mất. Mỗi bước vẫn ghi một dòng vết thao tác.
+<br><strong>Chỉ áp cho bảng nguồn và đích CÙNG TÊN.</strong> Khác tên thì ánh
+xạ cột có thể lệch theo kiểu khó thấy, nên phải đi từng bước và đọc từng màn
+hình.
+</small></p>
+</article>
+
+{# Khung THEO DOI SONG - dat NGAY DAU trang, truoc ca hai form.
+   Ly do: khi mot luot dang chay thi day la thu duy nhat nguoi dung can xem;
+   de no o duoi cac form thi phai cuon qua nhung thu khong dung duoc luc do
+   (mot luong chi mot quy trinh, nen form dang bi khoa). #}
+<div hx-get="/nhanh/song" hx-trigger="load" hx-swap="outerHTML">
+  <article><p><small class="muted">đang đọc trạng thái...</small></p></article>
+</div>
+
+<div class="grid">
+<article>
+  <header><strong>Thêm bảng vào luồng đang chạy</strong></header>
+  <p><small class="muted">23 bước. Dùng cho bảng <strong>chưa có dòng
+  MAP</strong>. Bảng phải đã được đăng ký ở
+  <a href="/wizard">trang Quy trình</a> &mdash; công cụ không được chạm vào
+  bảng ngoài danh sách quản lý.</small></p>
+  <p><small class="warn">Từ bước 6 là <strong>cửa sổ bảo trì</strong>: Replicat
+  của luồng đó dừng cho đến bước 18.</small></p>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="AUTO_ADD_TABLE">
+    <label>Tên bảng
+      <input type="text" name="target" required list="ds_them"
+             placeholder="VÍ DỤ: HT_MA_KVUC" style="text-transform:uppercase">
+    </label>
+    <datalist id="ds_them">
+      {% for t in them %}<option value="{{ t.src_table }}">{% endfor %}
+    </datalist>
+    <label>Luồng &mdash; chỉ cần chọn nếu bảng chưa gắn luồng
+      <select name="stream_sel">
+        <option value="">(lấy theo danh sách quản lý)</option>
+        {% for sid, st in cfg.streams.items() %}
+        <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="contrast">Chạy tự động &mdash; thêm bảng</button>
+  </form>
+</article>
+
+<article>
+  <header><strong>Đồng bộ lại bảng</strong></header>
+  <p><small class="muted">15 bước. Dùng cho bảng <strong>đã có dòng MAP</strong>
+  mà dữ liệu lệch. Luồng lấy theo danh sách quản lý, không cần chọn.</small></p>
+  <p><small class="bad"><strong>Có bước xoá sạch bảng đích</strong> rồi nạp
+  lại. Chốt không thể bỏ: bước 1 chạy đối chiếu trước và chỉ mở các bước sau
+  khi bảng <strong>thực sự lệch</strong> &mdash; nên một cú bấm không thể xoá
+  một bảng đang đúng.</small></p>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="AUTO_RESYNC">
+    <label>Tên bảng
+      <input type="text" name="target" required list="ds_resync"
+             placeholder="VÍ DỤ: CN_CH" style="text-transform:uppercase">
+    </label>
+    <datalist id="ds_resync">
+      {% for t in resync %}<option value="{{ t.src_table }}">{% endfor %}
+    </datalist>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="contrast">Chạy tự động &mdash; đồng bộ lại</button>
+  </form>
+</article>
+</div>
+
+<div id="khung"></div>
+
+<article>
+  <header><strong>Khi nào thao tác nhanh sẽ TỪ CHỐI</strong></header>
+  <table role="grid">
+  <thead><tr><th>Trường hợp</th><th>Vì sao</th></tr></thead>
+  <tbody>
+  <tr><td>Bảng không trong danh sách quản lý</td>
+      <td>Công cụ không được chạm vào bảng ngoài phạm vi. Đăng ký trước.</td></tr>
+  <tr><td>Nguồn và đích <strong>khác tên</strong></td>
+      <td>Ánh xạ cột có thể lệch theo kiểu khó thấy &mdash; phải đi từng bước.</td></tr>
+  <tr><td>Thêm bảng mà bảng <strong>đã có đủ TABLE và MAP</strong></td>
+      <td>Đó là trường hợp đồng bộ lại, không phải thêm mới.</td></tr>
+  <tr><td>Đồng bộ lại mà bảng <strong>chưa có MAP</strong></td>
+      <td>Chưa từng được đồng bộ &mdash; phải thêm vào luồng trước.</td></tr>
+  <tr><td>Luồng đang có một quy trình khác mở</td>
+      <td>Một luồng chỉ một quy trình cùng lúc.</td></tr>
+  <tr><td>Bảng <strong>không có khoá chính</strong></td>
+      <td>Dừng ở bước xác nhận cột khoá và đợi người nhập. Chọn khoá là phán
+        đoán nghiệp vụ, không phải việc của máy.</td></tr>
+  <tr><td>Đồng bộ lại mà bảng <strong>không hề lệch</strong></td>
+      <td>Dừng ở bước 1. Nạp lại một bảng đang đúng là việc vô ích và có rủi
+        ro.</td></tr>
+  </tbody></table>
+  <p><small class="muted">Khi dừng giữa đường, công cụ <strong>không hoàn
+  tác</strong> những bước đã chạy &mdash; chúng vẫn có hiệu lực thật trên hệ
+  thống. Mở trang quy trình và đi tiếp bằng tay từ đúng bước đang dừng.</small></p>
+</article>
+
+{% endblock %}

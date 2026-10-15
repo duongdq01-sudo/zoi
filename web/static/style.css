@@ -1,0 +1,493 @@
+/* =====================================================================
+   ggadmin - giao dien theo BSH Design System
+   Nguon quy uoc: D:\code\dash\bsh-dashboard-builder\references\
+                  design-system.md + layout-patterns.md + accessibility.md
+
+   BA DIEU CUA BO QUY UOC DUOC AP O DAY
+   1. 60-30-10: 60% nen sang, 30% xam BSH #808184, 10% cam vang #F9A51A.
+      Cam CHI de nhan mot diem, KHONG lam mau chu dao.
+   2. Khong dung #000 cho chu (dung slate-900) va khong dung #fff cho nen
+      body (dung slate-50) - tuong phan diu, khong gat mat.
+   3. Token spacing 4pt, radius <= 20px, shadow TRUNG TINH (khong tint mau).
+
+   KHAC BO QUY UOC MOT CHO, CO Y: tai lieu noi nap font Inter qua Google
+   Fonts, nhung cong cu nay chay tren server KHONG RA INTERNET va co luat
+   "khong CDN" (cong cu khong duoc goi ra ngoai khi DBA dang xu ly su co).
+   Nen dung font stack cuc bo: Inter neu may NGUOI DUNG da co, khong thi
+   Segoe UI / system-ui. Hinh thuc gan nhu nhau, va trang khong bao gio
+   phu thuoc mang.
+   ===================================================================== */
+
+:root {
+  /* --- Xam BSH (primary) --- */
+  --blue-50:#F3F3F4;  --blue-100:#E1E1E2; --blue-200:#C5C5C7;
+  --blue-300:#A7A8AA; --blue-400:#8E8F92; --blue-500:#808184;
+  --blue-600:#646568; --blue-700:#4E4E50; --blue-800:#38393A;
+  --blue-900:#262627;
+  /* --- Cam vang BSH (accent, chi 10%) --- */
+  --orange-50:#FEF6E9;  --orange-100:#FEE9C6; --orange-200:#FCD38F;
+  --orange-400:#F9AA27; --orange-500:#F9A51A; --orange-600:#C77E05;
+  /* --- Semantic: trang thai, khong phai brand --- */
+  --success:#1A8A4A; --success-bg:#E6F4EC;
+  --danger:#C0392B;  --danger-bg:#FBEAE8;
+  --warning:#C77E05; --warning-bg:#FEF6E9;
+  --info:#646568;    --info-bg:#F3F3F4;
+  /* --- Neutral --- */
+  --slate-50:#F8FAFC;  --slate-100:#F1F5F9; --slate-200:#E2E8F0;
+  --slate-300:#CBD5E1; --slate-400:#94A3B8; --slate-500:#64748B;
+  --slate-600:#475569; --slate-700:#334155; --slate-800:#1E293B;
+  --slate-900:#0F172A; --white:#FFFFFF;
+  /* --- Shadow trung tinh --- */
+  --shadow-sm:0 1px 2px rgba(15,23,42,.04);
+  --shadow-md:0 4px 12px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.03);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.08),0 4px 8px rgba(15,23,42,.04);
+  --shadow-focus:0 0 0 3px rgba(128,129,132,.25);
+  /* --- Radius / spacing / motion --- */
+  --radius-sm:6px; --radius-md:10px; --radius-lg:14px; --radius-xl:20px;
+  --radius-full:9999px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-6:24px; --space-8:32px;
+  --motion-fast:150ms cubic-bezier(.4,0,.2,1);
+  --sidebar-w:15rem;
+
+}
+
+/* =====================================================================
+   PICO v2 NHAN LAI THEO TOKEN BSH
+   Chinh BIEN cua Pico thay vi ghi de tung selector: it CSS hon, va moi
+   thanh phan Pico chua dung den (progress, details...) tu dong dung dung
+   mau thay vi lech mot minh.
+
+   VI SAO SELECTOR DAI NHU VAY, KHONG PHAI `:root`
+   Pico khai mau light theme o `:root:not([data-theme=dark]),[data-theme=light]`
+   - dac hieu (0,2,0). Mot khoi `:root` thuong chi (0,1,0) nen THUA, bat ke
+   thu tu nap file. Da do: 44 trong 52 bien bi de, tuc la nut / link / form
+   / tieu de van giu mau mac dinh cua Pico chu khong phai mau BSH, va minh
+   khong he thay vi body da duoc dat mau bang mot luat rieng.
+   Dung dung selector do + nap sau Pico thi thang o the ngang dac hieu.
+   ===================================================================== */
+:root:not([data-theme="dark"]), [data-theme="light"] {
+  --pico-font-family-sans-serif:Inter,"Segoe UI",system-ui,Roboto,Arial,sans-serif;
+  --pico-font-family:Inter,"Segoe UI",system-ui,Roboto,Arial,sans-serif;
+  --pico-font-size:93.75%;
+  --pico-line-height:1.55;
+  --pico-border-radius:var(--radius-md);
+  --pico-spacing:1rem;
+  --pico-background-color:var(--slate-50);
+  --pico-color:var(--slate-600);
+  --pico-h1-color:var(--slate-900); --pico-h2-color:var(--slate-900);
+  --pico-h3-color:var(--slate-900); --pico-h4-color:var(--slate-900);
+  --pico-h5-color:var(--slate-900); --pico-h6-color:var(--slate-900);
+  --pico-muted-color:var(--slate-500);
+  --pico-muted-border-color:var(--slate-200);
+  --pico-card-background-color:var(--white);
+  --pico-card-sectioning-background-color:var(--slate-50);
+  --pico-card-border-color:var(--slate-200);
+  --pico-code-background-color:var(--slate-100);
+  --pico-code-color:var(--slate-700);
+  --pico-primary:var(--blue-600);
+  --pico-primary-background:var(--blue-600);
+  --pico-primary-hover-background:var(--blue-700);
+  --pico-primary-border:var(--blue-600);
+  --pico-primary-hover-border:var(--blue-700);
+  --pico-primary-underline:rgba(100,101,104,.4);
+  --pico-primary-focus:rgba(128,129,132,.25);
+  --pico-primary-inverse:var(--white);
+  --pico-secondary:var(--slate-500);
+  --pico-secondary-background:var(--slate-500);
+  --pico-secondary-hover-background:var(--slate-600);
+  --pico-secondary-border:var(--slate-500);
+  --pico-secondary-inverse:var(--white);
+  /* `contrast` la nut muc L2 - dung CAM BSH de no thanh DUY NHAT mot diem
+     roi mat tren trang, dung nghia "10%" cua quy tac 60-30-10. */
+  --pico-contrast:var(--orange-600);
+  --pico-contrast-background:var(--orange-600);
+  --pico-contrast-hover-background:#A86803;
+  --pico-contrast-border:var(--orange-600);
+  --pico-contrast-hover-border:#A86803;
+  --pico-contrast-inverse:var(--white);
+  --pico-form-element-background-color:var(--white);
+  --pico-form-element-border-color:var(--slate-300);
+  --pico-form-element-color:var(--slate-800);
+  --pico-form-element-placeholder-color:var(--slate-400);
+  --pico-form-element-active-border-color:var(--blue-500);
+  --pico-form-element-focus-color:var(--blue-500);
+  --pico-form-element-spacing-vertical:.55rem;
+  --pico-form-element-spacing-horizontal:.75rem;
+  --pico-del-color:var(--danger);
+  --pico-ins-color:var(--success);
+  --pico-table-border-color:var(--slate-200);
+  --pico-table-row-stripped-background-color:var(--slate-50);
+}
+
+/* =====================================================================
+   KHUNG TRANG - menu doc ben TRAI
+   ===================================================================== */
+body { background:var(--slate-50); color:var(--slate-600); margin:0; }
+
+.khung {
+  display:grid;
+  grid-template-columns:var(--sidebar-w) minmax(0,1fr);
+  min-height:100vh;
+}
+
+/* Trang dang nhap: khong co menu nen luoi ve mot cot */
+.khung.mot-cot { grid-template-columns:1fr; }
+.khung.mot-cot .chinh { grid-column:1; }
+
+/* ---------------------------------------------------------- sidebar */
+.ben {
+  grid-column:1;
+  background:var(--blue-800);
+  color:var(--blue-100);
+  display:flex; flex-direction:column;
+  position:sticky; top:0; height:100vh; overflow-y:auto;
+  box-shadow:1px 0 0 rgba(15,23,42,.08);
+}
+
+.ben-hieu {
+  display:flex; align-items:center; gap:.6rem;
+  padding:1.15rem 1rem 1rem;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.ben-hieu .dau {                        /* o vuong chu "gg" - cam BSH */
+  width:2rem; height:2rem; flex:0 0 2rem;
+  display:grid; place-items:center;
+  background:var(--orange-500); color:var(--blue-900);
+  border-radius:var(--radius-sm);
+  font-weight:800; font-size:.8rem; letter-spacing:-.02em;
+}
+.ben-hieu .ten { font-weight:700; color:var(--white); font-size:1rem;
+                 line-height:1.15; }
+.ben-hieu .phu { font-size:.68rem; color:var(--blue-300); letter-spacing:.04em;
+                 text-transform:uppercase; }
+
+.ben nav { padding:.65rem .5rem; flex:1; }
+.ben .nhom {
+  font-size:.65rem; font-weight:700; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--blue-400);
+  padding:.9rem .6rem .35rem;
+}
+.ben a {
+  display:flex; align-items:center; gap:.6rem;
+  min-height:40px;                      /* touch target, accessibility.md 5 */
+  padding:.5rem .6rem; margin-bottom:1px;
+  border-radius:var(--radius-sm);
+  color:var(--blue-100);
+  font-size:.875rem; font-weight:500;
+  text-decoration:none;
+  transition:background var(--motion-fast), color var(--motion-fast);
+}
+.ben a:hover { background:rgba(255,255,255,.07); color:var(--white); }
+.ben a.dang {                            /* trang dang mo */
+  background:rgba(249,165,26,.14);
+  color:var(--white); font-weight:600;
+  box-shadow:inset 3px 0 0 var(--orange-500);
+}
+.ben a svg { width:17px; height:17px; flex:0 0 17px; stroke-width:1.8; }
+.ben a .so {                             /* bong so, vd so canh bao */
+  margin-left:auto; font-size:.68rem; font-weight:700;
+  min-width:1.3rem; text-align:center;
+  padding:.1rem .35rem; border-radius:var(--radius-full);
+  background:rgba(255,255,255,.12);
+}
+.ben a .so.co { background:var(--danger); color:var(--white); }
+
+.ben-chan {
+  padding:.8rem 1rem 1rem;
+  border-top:1px solid rgba(255,255,255,.08);
+  font-size:.75rem; color:var(--blue-300);
+}
+.ben-chan .ai { color:var(--white); font-weight:600; font-size:.82rem; }
+.ben-chan a {
+  display:inline-flex; margin-top:.5rem; padding:.35rem .6rem;
+  min-height:32px; align-items:center;
+  border:1px solid rgba(255,255,255,.18); border-radius:var(--radius-sm);
+  font-size:.75rem;
+}
+
+/* ------------------------------------------------------------ main */
+.chinh { grid-column:2; min-width:0; display:flex; flex-direction:column; }
+
+/* Thanh tren - sticky theo layout-patterns.md */
+.tren {
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; gap:1rem;
+  min-height:56px; padding:.6rem 1.5rem;
+  background:rgba(255,255,255,.95);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--slate-200);
+}
+.tren h1 { font-size:1.05rem; font-weight:700; color:var(--slate-900);
+           margin:0; line-height:1.2; }
+.tren .sub { font-size:.78rem; color:var(--slate-500); margin-top:.1rem; }
+.tren .phai { margin-left:auto; display:flex; align-items:center; gap:.9rem;
+              font-size:.78rem; color:var(--slate-500); }
+.tren .phai .nhip { display:inline-flex; align-items:center; gap:.35rem; }
+.tren .phai .den {
+  width:.5rem; height:.5rem; border-radius:var(--radius-full);
+  background:var(--success); box-shadow:0 0 0 3px var(--success-bg);
+}
+.tren .phai .den.nguy { background:var(--danger);
+                        box-shadow:0 0 0 3px var(--danger-bg); }
+
+.than { padding:1.5rem; flex:1; }
+.than > h3:first-child, .than > h4:first-child { margin-top:0; }
+
+footer.chan {
+  padding:1rem 1.5rem 1.5rem; font-size:.75rem; color:var(--slate-500);
+  border-top:1px solid var(--slate-200); background:var(--white);
+}
+
+/* Breakpoint theo layout-patterns.md.
+   Duoi 1024px: menu thanh thanh ngang CUON DUOC, khong an han - an menu
+   la lam nguoi dung ket tren mot trang. */
+@media (max-width:1023px) {
+  .khung { grid-template-columns:1fr; }
+  .ben { position:static; height:auto; flex-direction:row; align-items:center;
+         overflow-x:auto; gap:.3rem; padding:.4rem .6rem; }
+  .ben-hieu { border:0; padding:.3rem .6rem .3rem 0; }
+  .ben-hieu .phu, .ben .nhom, .ben-chan { display:none; }
+  .ben nav { display:flex; gap:.2rem; padding:0; }
+  .ben a { white-space:nowrap; margin:0; }
+  .ben a.dang { box-shadow:inset 0 -3px 0 var(--orange-500); }
+  .than, .tren { padding-left:1rem; padding-right:1rem; }
+}
+
+/* =====================================================================
+   The (card) va tieu de
+   ===================================================================== */
+article {
+  background:var(--white);
+  border:1px solid var(--slate-200);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md);
+  padding:var(--space-6);
+  margin:0 0 var(--space-4);
+}
+article > header {
+  margin:calc(var(--space-6) * -1) calc(var(--space-6) * -1) var(--space-4);
+  padding:.75rem var(--space-6);
+  background:var(--slate-50);
+  border-bottom:1px solid var(--slate-200);
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  font-size:.95rem; color:var(--slate-900);
+}
+article > *:last-child { margin-bottom:0; }
+
+h3 { font-size:1.375rem; font-weight:700; color:var(--slate-900);
+     margin:0 0 .35rem; letter-spacing:-.01em; }
+h4 { font-size:1.125rem; font-weight:600; color:var(--slate-900);
+     margin:var(--space-8) 0 var(--space-3); }
+p  { margin:0 0 .6rem; }
+
+/* =====================================================================
+   KPI card - mau chuan trong design-system.md muc 8.6
+   Vien trai 5px xam BSH; nhan IN HOA chu nho; so lon 800.
+   ===================================================================== */
+.kpi-hang {
+  display:grid; gap:var(--space-4); margin-bottom:var(--space-6);
+  grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));
+}
+.kpi {
+  background:var(--white);
+  border:1px solid var(--slate-200);
+  border-left:5px solid var(--blue-500);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md);
+  padding:var(--space-4) var(--space-4) var(--space-3);
+  transition:box-shadow var(--motion-fast), border-color var(--motion-fast);
+}
+.kpi:hover { box-shadow:var(--shadow-lg); border-color:var(--blue-200); }
+.kpi.tot  { border-left-color:var(--success); }
+.kpi.canh { border-left-color:var(--warning); }
+.kpi.nguy { border-left-color:var(--danger); }
+.kpi .nhan {
+  display:flex; align-items:center; gap:.4rem;
+  font-size:.68rem; font-weight:600; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--slate-400);
+  margin-bottom:.45rem;
+}
+.kpi .nhan .bg {                         /* badge icon, nen tint xam BSH */
+  margin-left:auto; width:1.55rem; height:1.55rem;
+  display:grid; place-items:center;
+  background:var(--blue-50); border-radius:var(--radius-sm);
+  color:var(--blue-600);
+}
+.kpi .nhan .bg svg { width:15px; height:15px; stroke-width:1.8; }
+.kpi .so {
+  font-size:2rem; font-weight:800; line-height:1.1;
+  color:var(--slate-800); letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.kpi .so .dv { font-size:.9rem; font-weight:600; color:var(--slate-400);
+               margin-left:.2rem; }
+.kpi .duoi { font-size:.78rem; font-weight:500; color:var(--slate-500);
+             margin-top:.3rem; }
+.kpi .duoi.tot  { color:var(--success); font-weight:600; }
+.kpi .duoi.canh { color:var(--warning); font-weight:600; }
+.kpi .duoi.nguy { color:var(--danger);  font-weight:600; }
+
+/* =====================================================================
+   Luoi, bang khoa - gia tri
+   ===================================================================== */
+.grid-3 { display:grid; gap:var(--space-4);
+          grid-template-columns:repeat(auto-fit,minmax(20rem,1fr)); }
+
+.kv { display:grid; grid-template-columns:auto 1fr;
+      gap:.35rem var(--space-4); font-size:.84rem; align-items:baseline; }
+.kv b { font-weight:600; color:var(--slate-500); font-size:.78rem; }
+.kv span { color:var(--slate-700); min-width:0; }
+
+/* =====================================================================
+   Bang - design-system.md muc 4 "Data Table"
+   Dong tieu de: nen xam dam, chu trang. Vien 1px giua cac dong.
+   ===================================================================== */
+table[role=grid], table {
+  font-size:.82rem; border-collapse:collapse; width:100%;
+  background:var(--white);
+}
+table[role=grid] thead th, table thead th {
+  background:var(--blue-600); color:var(--white);
+  font-size:.71rem; font-weight:600; letter-spacing:.035em;
+  text-transform:uppercase;
+  padding:.5rem .6rem; text-align:left;
+  border:0; white-space:nowrap;
+  position:sticky; top:0; z-index:1;
+}
+table[role=grid] tbody td, table tbody td {
+  padding:.4rem .6rem;
+  border-bottom:1px solid var(--slate-200);
+  color:var(--slate-700); vertical-align:top;
+}
+table[role=grid] tbody tr:nth-child(even) { background:var(--slate-50); }
+table[role=grid] tbody tr:hover { background:var(--blue-50); }
+table thead th:first-child, table tbody td:first-child { padding-left:.8rem; }
+
+/* =====================================================================
+   Trang thai - LUON kem CHU, khong chi mau.
+   accessibility.md muc 2: 8% nam gioi VN mu mau do-luc, nen mau mot minh
+   khong duoc la kenh duy nhat truyen nghia.
+   ===================================================================== */
+.ok   { color:var(--success); font-weight:600; }
+.bad  { color:var(--danger);  font-weight:600; }
+.warn { color:var(--warning); font-weight:600; }
+.err  { color:var(--danger); }
+.muted{ color:var(--slate-500); }
+
+.pill {
+  display:inline-block; font-size:.68rem; font-weight:700;
+  letter-spacing:.03em; padding:.12rem .45rem;
+  border-radius:var(--radius-full);
+  border:1px solid currentColor;
+}
+.pill.bad  { background:var(--danger-bg); }
+.pill.warn { background:var(--warning-bg); }
+
+/* O bang bao lech - nen tint cam, KHONG phai nen toi */
+.lech { background:var(--warning-bg) !important;
+        box-shadow:inset 3px 0 0 var(--warning); }
+
+/* =====================================================================
+   Khung xac nhan L1 / L2
+   L1 vien xam BSH, L2 vien CAM - diem roi mat duy nhat cua trang.
+   ===================================================================== */
+.xacnhan {
+  border:1px solid var(--slate-200);
+  border-top:4px solid var(--orange-500);
+  border-radius:var(--radius-lg);
+  background:var(--white);
+  box-shadow:var(--shadow-lg);
+  padding:var(--space-6); margin:var(--space-4) 0;
+}
+.xacnhan.l1 { border-top-color:var(--blue-500); }
+.dem { font-variant-numeric:tabular-nums; font-weight:800;
+       color:var(--orange-600); }
+
+/* Muc kiem truoc khi chay */
+.pf-box { background:var(--slate-50); border:1px solid var(--slate-200);
+          border-radius:var(--radius-md); padding:var(--space-3) var(--space-4);
+          margin-bottom:var(--space-4); }
+.pf-box > p:first-child { font-size:.88rem; color:var(--slate-900); }
+.pf { display:flex; align-items:baseline; gap:.5rem;
+      font-size:.82rem; margin:.3rem 0; }
+.pf .t {
+  flex:0 0 5.8rem; text-align:center;
+  font-size:.67rem; font-weight:700; letter-spacing:.03em;
+  padding:.1rem .3rem; border-radius:var(--radius-sm);
+  border:1px solid currentColor;
+}
+.pf .t.ok   { background:var(--success-bg); }
+.pf .t.bad  { background:var(--danger-bg); }
+.pf .t.warn { background:var(--warning-bg); }
+.pf strong { color:var(--slate-800); font-weight:600; }
+
+/* =====================================================================
+   Khoi ma - log, diff, param
+   ===================================================================== */
+pre.log, pre.diff {
+  background:var(--slate-900); color:#D7DEE8;
+  border:1px solid var(--slate-800); border-radius:var(--radius-md);
+  padding:.7rem .85rem; overflow:auto;
+  font-family:var(--pico-font-family-monospace);
+  font-size:.76rem; line-height:1.45; white-space:pre;
+  margin:0 0 var(--space-3);
+}
+pre.log  { max-height:26rem; }
+pre.diff { max-height:22rem; }
+pre.diff .add { color:#6FD08C; }
+pre.diff .del { color:#F08C84; }
+
+textarea.prm {
+  font-family:var(--pico-font-family-monospace);
+  font-size:.8rem; line-height:1.5; min-height:26rem; white-space:pre;
+  background:var(--white); color:var(--slate-800);
+}
+
+code {
+  background:var(--slate-100); color:var(--slate-700);
+  border-radius:var(--radius-sm); padding:.08rem .3rem; font-size:.86em;
+}
+
+/* =====================================================================
+   Nut, o nhap - touch target >= 40px (accessibility.md muc 5)
+   ===================================================================== */
+button, [role=button], input[type=submit] {
+  min-height:40px; font-size:.84rem; font-weight:600;
+  border-radius:var(--radius-md); padding:.45rem 1rem; width:auto;
+}
+input, select, textarea { font-size:.84rem; margin-bottom:.5rem; }
+label { font-size:.82rem; font-weight:600; color:var(--slate-700); }
+form .grid { gap:.6rem; }
+small { font-size:.78rem; }
+
+/* Focus ring = xam BSH, hien ro, mot kieu o moi noi */
+*:focus-visible {
+  outline:none; box-shadow:var(--shadow-focus); border-radius:var(--radius-sm);
+}
+
+details > summary { font-size:.82rem; color:var(--slate-600); }
+
+/* Chi tro nguoi dung man hinh doc (accessibility.md muc 3) */
+.sr-only {
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+
+/* Nguoi roi loan tien dinh co the buon non voi chuyen dong */
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after {
+    animation-duration:.01ms !important; transition-duration:.01ms !important;
+  }
+}
+
+/* In ra giay - bo menu, bo shadow */
+@media print {
+  body { background:var(--white); }
+  .ben, .tren .phai, form, footer.chan { display:none; }
+  .khung { grid-template-columns:1fr; }
+  article, .kpi { box-shadow:none; border:1px solid var(--slate-200);
+                  break-inside:avoid; }
+  pre.log, pre.diff { background:var(--white); color:var(--slate-800); }
+  @page { size:A4 landscape; margin:12mm; }
+}

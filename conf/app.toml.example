@@ -1,0 +1,77 @@
+# ggadmin - cau hinh khong bi mat. Mat khau nam o conf/secrets.ini (0600).
+
+[server]
+# Bind 127.0.0.1: firewalld dang bat va `oracle` khong co sudo nen khong mo
+# duoc port nao. Va cong cu sua duoc param file production nen khong phoi
+# ra LAN la an toan hon. Moi DBA vao bang SSH tunnel:
+#   ssh -N -L 8099:127.0.0.1:8099 oracle@172.16.33.90
+host = "127.0.0.1"
+port = 8099
+poll_seconds = 30
+
+[paths]
+gg_home     = "/u01/app/ogg"
+data_dir    = "/u01/app/ggadmin/data"
+log_dir     = "/u01/app/ggadmin/logs"
+scripts_dir = "/u01/app/ggadmin/scripts"
+
+[oracle]
+oracle_home = "/u01/app/oracle/product/19.3.0.0/dbhome_1"
+oracle_sid  = "BSHC"
+# tns_admin de trong = $ORACLE_HOME/network/admin
+
+[retention]
+raw_days = 90
+
+# Moc RONG cua tung discard file. Khac nhau theo DO DAI TEN FILE nen phai
+# nho rieng tung cai - lech mot byte la co discard that.
+[discard_baseline]
+RPMNVODS = 118
+RHT      = 113
+RDTHU    = 115
+
+# 3 luong doc lap. extract -> trail -> replicat
+[streams.PM]
+extract  = "ETPMNV"
+replicat = "RPMNVODS"
+trail    = "pm"
+ten      = "Chinh (BH_* 44 + KT_* 8)"
+
+[streams.HT]
+extract  = "ETHT"
+replicat = "RHT"
+trail    = "ht"
+ten      = "Danh muc + thanh toan"
+
+[streams.DT]
+extract  = "ETDTHU"
+replicat = "RDTHU"
+trail    = "dt"
+ten      = "Bao cao doanh thu"
+
+# ------------------------------------------------------------------ canh bao
+# Canh bao chi hien tren UI thi phai co nguoi dang mo trang moi biet.
+# Replicat abend luc 2 gio sang thi khong ai thay -> can kenh ra ngoai.
+#
+# Da kiem 2026-10-13, server RA DUOC ca 3 endpoint Zalo, khong qua proxy:
+#   openapi.zalo.me           HTTP 200
+#   oauth.zaloapp.com         HTTP 405  (dung, no chi nhan POST)
+#   business.openapi.zalo.me  HTTP 200
+[notify]
+enabled        = true
+min_severity   = "WARN"
+repeat_minutes = 60
+max_per_hour   = 20
+
+# Cach 1, DON GIAN NHAT neu BSH co gateway noi bo da boc Zalo san:
+# POST JSON toi mot URL, khong phai quan ly access_token het han o day.
+[notify.webhook]
+url = ""
+
+# Cach 2, Zalo Bot Platform - DANG DUNG CACH NAY.
+# Token o conf/secrets.ini khoi [zalo_bot] (khoa 'token').
+# chat_ids la id cua GROUP Zalo. Lay bang: them bot vao group, nhan mot tin
+# trong group, roi chay tools/zalo_find_chat.sh (xem ghi chu trong notify.py
+# ve vi sao chi co duong nay).
+[notify.zalo_bot]
+chat_ids = []

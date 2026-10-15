@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Vết thao tác &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>Vết thao tác</h4>
+<p>
+  Chuỗi hash:
+  {% if chain_ok %}<span class="ok">liền mạch</span>{% else %}<span class="bad">CÓ CHỖ ĐỨT</span>{% endif %}
+  &mdash; <small>{{ chain_msg }}</small>
+</p>
+<p><small>Ghi ở 2 nơi: bảng này và <code>logs/audit-YYYYMM.jsonl</code> (chỉ
+thêm, quyền 0600). Một hệ ghi vết mà kẻ tấn công xoá được bằng cùng đặc quyền
+thì không phải ghi vết.</small></p>
+<table role="grid">
+<thead><tr><th>Giờ</th><th>Người</th><th>Từ máy</th><th>Mức</th><th>Thao tác</th>
+<th>Đối tượng</th><th>Lý do</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr><td>{{ r.ts|hhmm }}</td><td>{{ r.username }}</td><td>{{ r.peer or '-' }}</td>
+<td>{{ r.level }}</td><td>{{ r.action }}</td><td>{{ r.target or '-' }}</td>
+<td>{{ r.reason or '-' }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% endblock %}

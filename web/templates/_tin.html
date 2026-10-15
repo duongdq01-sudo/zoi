@@ -1,0 +1,8 @@
+{# Khung THONG TIN - khong phai xac nhan, khong co token, khong co nut chay.
+   Dung khi mot thao tac duoc yeu cau nhung KHONG co viec gi can lam: hien
+   mot nut "Chay" ma bam vao khong lam gi la noi doi voi nguoi dung. #}
+<article class="xacnhan">
+  <header><strong>{{ tieu_de }}</strong></header>
+  {% if noi_dung %}<pre class="diff">{{ noi_dung }}</pre>{% endif %}
+  <p>{{ ghi_chu }}</p>
+</article>

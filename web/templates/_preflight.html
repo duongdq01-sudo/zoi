@@ -1,0 +1,19 @@
+{# Ket qua pre-flight. Chi check `blocking` moi quyet dinh mo nut hay khong. #}
+<div class="pf-box">
+  <p><strong>Kiểm tra trước khi chạy &mdash; {{ pf.nhan }}{% if pf.target %}:
+    <code>{{ pf.target }}</code>{% endif %}</strong>
+    {% if pf.ok %}<span class="ok">ĐẠT</span>
+    {% else %}<span class="bad">KHÔNG ĐẠT</span> &mdash; <small>{{ pf.note }}</small>{% endif %}
+  </p>
+  {% for c in pf.checks %}
+  <div class="pf">
+    <span class="t {{ 'ok' if c.ok else ('bad' if c.blocking else 'warn') }}">{{ c.icon }}</span>
+    <strong>{{ c.name }}</strong> &mdash; <small>{{ c.detail }}</small>
+  </div>
+  {% endfor %}
+  {% if not pf.ok %}
+  <p><small class="muted">Không đạt thì nút <strong>không mở được</strong>. Không
+    có ô &laquo;tôi hiểu rủi ro&raquo; &mdash; muốn vượt thì làm tay theo quy
+    trình, có chủ ý.</small></p>
+  {% endif %}
+</div>

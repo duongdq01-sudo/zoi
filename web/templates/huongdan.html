@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Hướng dẫn &mdash; ggadmin{% endblock %}
+{% block body %}
+
+<h3>Hướng dẫn sử dụng</h3>
+<p><small class="muted">Trang này là bản ngắn nhất đủ để làm việc. Mỗi bước
+trong quy trình đều có ghi chú riêng ngay tại chỗ &mdash; không cần nhớ gì ở
+đây.</small></p>
+
+<article>
+  <header><strong>Mở công cụ</strong></header>
+  <p>Bấm đôi <code>gg-admin.cmd</code> trên Desktop. Cửa sổ đen mở ra:
+    <strong>giữ nguyên, đừng đóng</strong> &mdash; đóng nó là đóng đường hầm,
+    web sẽ mất kết nối.</p>
+  <p>Browser tự mở <code>http://127.0.0.1:8099</code>. Đăng nhập bằng tài khoản
+    được cấp.</p>
+  <p><small class="muted">Việc chạy lâu (nạp dữ liệu) chạy
+    <strong>ngoài</strong> tiến trình web, nên đóng đường hầm giữa lúc nạp
+    <strong>không</strong> làm hỏng việc đó. Mở lại là thấy đúng chỗ cũ.</small></p>
+</article>
+
+<article>
+  <header><strong>Hằng ngày: chỉ cần xem 1 trang</strong></header>
+  <p><a href="/"><strong>Tổng quan</strong></a>. Đọc đúng ba thứ:</p>
+  <table role="grid">
+    <tbody>
+    <tr><td><strong>7 tiến trình</strong></td>
+        <td>Phải <span class="ok">RUNNING</span> cả 7. Có cái nào màu khác
+          &rarr; xem mục &laquo;Khi có màu đỏ&raquo; bên dưới.</td></tr>
+    <tr><td><strong>Chậm sau</strong></td>
+        <td>Số giây dữ liệu ở đích đang chậm sau nguồn. Vài giây là bình
+          thường. Trên 5 phút thì công cụ tự cảnh báo.</td></tr>
+    <tr><td><strong>Cảnh báo</strong></td>
+        <td>Số <strong>0</strong> là khoẻ. Khác 0 thì bấm vào đọc.</td></tr>
+    </tbody>
+  </table>
+  <p><small class="muted">Không phải tự đoán ngưỡng nào là nguy hiểm: công cụ có
+    12 luật cảnh báo sẵn, và cảnh báo còn được gửi ra Zalo. Không có cảnh báo
+    nghĩa là chưa có gì cần làm.</small></p>
+</article>
+
+<article>
+  <header><strong>Việc hay làm nhất: thêm bảng mới từ Core về ODS</strong></header>
+  <p>Hai bước, làm trên web, không cần SSH:</p>
+  <ol>
+    <li><strong>Đăng ký bảng vào danh sách quản lý.</strong>
+      Vào <a href="/wizard">Quy trình</a>, khung
+      <em>Đăng ký bảng mới</em>: gõ tên bảng, chọn luồng, ghi lý do, bấm
+      <em>Đăng ký</em>. Làm lần lượt cho từng bảng.
+      <br><small class="muted">Công cụ chỉ được chạm vào bảng nằm trong danh
+        sách này. Đây là chốt để nó không bao giờ chạm vào bảng ngoài phạm vi
+        &mdash; kể cả do gõ sai tên.</small></li>
+    <li><strong>Mở quy trình thêm bảng.</strong> Cùng trang
+      <a href="/wizard">Quy trình</a>, khung <em>Thêm bảng vào luồng đang
+      chạy</em>: chọn luồng, rồi chọn bảng.
+      <strong>Giữ Ctrl để chọn nhiều bảng cùng lúc.</strong></li>
+  </ol>
+  <p><strong>Chọn nhiều bảng là nên làm</strong> khi các bảng có liên quan nhau
+    (ví dụ bảng chứng từ và bảng chi tiết của nó). Lý do: cả lô sẽ được nạp ở
+    <strong>đúng một thời điểm</strong>, nên dữ liệu ở đích nhất quán ngay từ
+    đầu. Chạy từng bảng riêng thì mỗi bảng nạp ở một thời điểm khác, và trong
+    khoảng giữa có thể có dòng chi tiết mà dòng gốc chưa về.
+    Thêm nữa: một lô = <strong>một lần dừng Replicat</strong> thay vì nhiều
+    lần.</p>
+  <p><small class="muted">Đo được ngày 14/10/2026: lô 8 bảng / 4,94 triệu dòng
+    mất <strong>3 phút 45</strong> cửa sổ bảo trì. Trước đó một bảng 3.355 dòng
+    mất 9 phút.</small></p>
+</article>
+
+<article>
+  <header><strong>Cách nhanh: chỉ gõ tên bảng</strong></header>
+  <p>Vào <a href="/nhanh"><strong>Thao tác nhanh</strong></a>. Hai việc hay
+    làm nhất có ở đó, chỉ cần gõ tên bảng:</p>
+  <ul>
+    <li><strong>Thêm bảng vào luồng</strong> &mdash; cho bảng chưa đồng bộ.</li>
+    <li><strong>Đồng bộ lại bảng</strong> &mdash; cho bảng đã đồng bộ mà dữ
+      liệu lệch.</li>
+  </ul>
+  <p>Công cụ tự đi hết quy trình. <strong>Mỗi bước vẫn phải đạt mới sang bước
+    sau</strong>; bước nào không đạt thì dừng ngay tại đó và nói rõ vì sao.</p>
+  <p><small class="muted">Phải đăng ký bảng trước (ở
+    <a href="/wizard">Quy trình</a>), và <strong>chỉ áp cho bảng nguồn và đích
+    cùng tên</strong>. Khác tên thì phải đi từng bước và đọc từng màn hình.
+    <br>Đổi lại sự tiện: bình thường mỗi bước mức L2 bắt gõ tay tên bảng để
+    buộc đọc lại màn hình; cách nhanh gộp thành <strong>một lần</strong> cho cả
+    lượt. Mọi chốt kỹ thuật vẫn chạy nguyên, nhưng sự chú ý của mình ở từng
+    bước thì không còn. Việc lớn hoặc bảng lạ thì nên đi từng bước.</small></p>
+</article>
+
+<article>
+  <header><strong>Có lỗi thì làm gì &mdash; làm đúng một việc này trước</strong></header>
+  <p>Bấm <strong>Khôi phục an toàn luồng &lt;tên luồng&gt;</strong>. Nút này
+    tự hiện ra ngay chỗ có lỗi: trên trang quy trình khi một bước lỗi, trong
+    khung kết quả khi một thao tác không đạt, và ở trang
+    <a href="/control">Điều khiển</a> cho cả ba luồng.</p>
+  <p>Thứ tự ưu tiên của nó:</p>
+  <ol>
+    <li><strong>Không mất dữ liệu</strong></li>
+    <li>Luồng chạy lại được</li>
+    <li>Độ trễ nhỏ</li>
+  </ol>
+  <p>Mục 1 và mục 3 <strong>xung đột nhau</strong>, nên thứ tự này quan trọng.
+    Khi Extract có nhiều dòng <code>TABLE</code> hơn số dòng <code>MAP</code>
+    của Replicat, cách giảm độ trễ nhanh nhất là cho Replicat chạy &mdash;
+    nhưng Replicat lúc đó <strong>bỏ qua</strong> bản ghi của bảng thiếu
+    <code>MAP</code> mà <strong>vẫn dời mốc checkpoint</strong>. Mất dữ liệu
+    không discard, không log, không dấu vết. Nên trong tình huống đó công cụ
+    <strong>dừng cả hai</strong> và đợi anh thêm dòng <code>MAP</code>.</p>
+  <p><small class="muted">Bấm vào không làm tình hình xấu thêm được: nó chỉ
+    <strong>chạy hoặc dừng tiến trình</strong>, không sửa tham số, không
+    <code>TRUNCATE</code>, không chạm mốc checkpoint. Nó
+    <strong>khám trước</strong> và hiện rõ sẽ chạy lệnh nào, theo thứ tự nào,
+    vì sao &mdash; anh đọc rồi mới xác nhận. Nếu không có việc gì cần làm thì
+    nó nói luôn chứ không hiện nút.
+    <br>Nó cũng <strong>không sửa gì trong quy trình</strong>: phiên vẫn ở
+    đúng bước đang dừng. Khôi phục xong rồi mới bình tĩnh xem lỗi ở bước nào
+    và khắc phục &mdash; đó là việc thứ hai, không phải việc đầu.</small></p>
+</article>
+
+<article>
+  <header><strong>Đang trong quy trình thì làm gì</strong></header>
+  <p>Quy trình đi <strong>từng bước, theo thứ tự</strong>. Mỗi bước:</p>
+  <ol>
+    <li>Đọc <strong>Xem trước</strong> &mdash; đây là lệnh/SQL thật sẽ chạy,
+      không phải lời mô tả.</li>
+    <li>Đọc phần <strong>kiểm tra trước khi chạy</strong>. Phải
+      <span class="ok">đạt</span> hết thì nút <em>Chạy</em> mới bấm được.</li>
+    <li>Ghi <strong>lý do</strong> (từ 10 ký tự). Bước mức L2 còn bắt
+      <strong>gõ tay</strong> tên để xác nhận &mdash; ô đó không dán được, có ý
+      như vậy.</li>
+    <li>Bấm <em>Chạy</em>, đọc kết quả, qua bước sau.</li>
+  </ol>
+  <p><strong>Ba điều không phải lo:</strong></p>
+  <ul>
+    <li><strong>Không thể làm sai thứ tự.</strong> Thứ tự nằm trong code, giao
+      diện không có chỗ đảo. Bước trước chưa xong thì bước sau không bấm
+      được.</li>
+    <li><strong>Đóng browser / mất mạng giữa lúc chạy không mất gì.</strong>
+      Tiến độ lưu ở server. Mở lại <a href="/wizard">Quy trình</a>, bấm vào
+      phiên đó, nó dừng ở bước cũ. Người khác cũng mở tiếp được.</li>
+    <li><strong>Bước nào báo đỏ thì dừng lại, không có dữ liệu nào bị
+      hư.</strong> Đọc dòng chữ màu đỏ &mdash; nó nói rõ thiếu gì và cần chạy
+      lệnh gì. Sửa xong bấm lại đúng bước đó.</li>
+  </ul>
+  <p><small class="muted">Trong một lô nhiều bảng: một bảng lỗi là cả bước báo
+    lỗi. Các bảng đã xong <strong>giữ nguyên</strong>; bấm lại thì nó chạy tiếp
+    từ bảng bị lỗi, không làm lại từ đầu.</small></p>
+</article>
+
+<article>
+  <header><strong>Kiểm dữ liệu có đúng không</strong></header>
+  <p>Vào <a href="/verify">Đối chiếu</a>, chọn luồng, chọn chế độ:</p>
+  <table role="grid">
+    <tbody>
+    <tr><td><strong>Nhanh</strong></td>
+        <td>Không dừng gì cả, xem được ngay. Nhưng <strong>có thể báo lệch
+          oan</strong>, vì dữ liệu ở đích đang chạy tiếp trong lúc đếm. Dùng để
+          soi nhanh.</td></tr>
+    <tr><td><strong>Chuẩn</strong></td>
+        <td>Dừng tạm các tiến trình để chụp một thời điểm chính xác rồi đối
+          chiếu, sau đó tự chạy lại. Mất khoảng 2 phút. Kết quả này
+          <strong>tin được</strong>.</td></tr>
+    </tbody>
+  </table>
+  <p>Kết quả <strong>KHỚP</strong> nghĩa là số dòng và nội dung trùng khít. Báo
+    <strong>LỆCH</strong> thì chạy <em>Đối chiếu chuẩn</em> lại một lần cho
+    chắc; vẫn lệch thì dùng quy trình <strong>Đồng bộ lại bảng</strong> để nạp
+    lại bảng đó.</p>
+</article>
+
+<article>
+  <header><strong>Khi có màu đỏ</strong></header>
+  <table role="grid">
+    <thead><tr><th>Thấy gì</th><th>Làm gì</th></tr></thead>
+    <tbody>
+    <tr><td>Một tiến trình <strong>STOPPED</strong></td>
+        <td>Vào <a href="/control">Điều khiển</a>, bấm Chạy. Nếu nó dừng lại
+          nữa thì xem <a href="/logs">Log</a>.</td></tr>
+    <tr><td>Một tiến trình <strong>ABENDED</strong></td>
+        <td><strong>Đừng bấm Chạy ngay.</strong> Vào <a href="/logs">Log</a>
+          đọc nguyên nhân trước &mdash; chạy lại mà chưa sửa thì nó dừng tiếp,
+          và lần này có thể bỏ qua dữ liệu.</td></tr>
+    <tr><td>Chậm sau tăng đều không tụt</td>
+        <td>Xem <a href="/history">Lịch sử</a> để biết tăng từ lúc nào. Thường
+          là nguồn đang có đợt ghi lớn; chờ. Quá 30 phút thì báo cho người
+          quản trị DB.</td></tr>
+    <tr><td>Cảnh báo <strong>có dữ liệu bị bỏ</strong></td>
+        <td>Có dòng dữ liệu không áp được vào đích. Vào <a href="/logs">Log</a>
+          xem bảng nào, lỗi gì. Đây là cảnh báo cần xem ngay &mdash; dữ liệu
+          đang thiếu ở đích mà không có gì khác báo.</td></tr>
+    <tr><td>Thanh đỏ <strong>CHỈ ĐỌC</strong></td>
+        <td>Đĩa còn dưới 25 GB nên công cụ tự tắt mọi thao tác ghi. Dọn đĩa,
+          nó tự mở lại.</td></tr>
+    </tbody>
+  </table>
+</article>
+
+<article>
+  <header><strong>Ba điều nên biết</strong></header>
+  <ul>
+    <li><strong>Mọi thao tác đều được ghi lại</strong>, kèm tên người và lý do
+      &mdash; xem <a href="/jobs">Việc chạy</a>. Không có thao tác nào ẩn
+      danh.</li>
+    <li><strong>Mọi script công cụ sinh ra đều lưu lại trên đĩa</strong>
+      (<code>/u01/app/ggadmin/scripts/</code>). Đọc được, chạy tay được. Công
+      cụ không phải hộp đen.</li>
+    <li><strong>Công cụ không có quyền xoá bất cứ thứ gì</strong>, và không thể
+      tắt DB. Có làm sai thì cũng không mất bảng nào.</li>
+  </ul>
+</article>
+
+<article>
+  <header><strong>Việc KHÔNG làm trên web</strong></header>
+  <p>Ba việc sau có ý để ngoài công cụ, làm tay theo quy trình:
+    <strong>khởi động / tắt DB</strong>,
+    <strong>đổi tham số DB</strong> (<code>ALTER SYSTEM</code>),
+    <strong>tạo luồng GoldenGate mới</strong> ở môi trường thật.</p>
+  <p><small class="muted">Không phải vì công cụ làm không được, mà vì chúng tác
+    động rộng hơn một bảng và cần một quyết định có ý thức, không nên nằm sau
+    một cái nút.</small></p>
+</article>
+
+{% endblock %}

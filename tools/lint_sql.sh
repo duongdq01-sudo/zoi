@@ -42,6 +42,29 @@ else
   echo "    OK"
 fi
 
+# Script chay bang `sqlplus @file` ma THIEU `EXIT` o cuoi -> sqlplus chay
+# het script roi CHO INPUT o dau nhac SQL va TREO VINH VIEN. Moi lan chay de
+# lai mot session (neu la `/ as sysdba` thi la mot session sysdba treo).
+# Da gap that 2026-10-14 voi cs10_ods_index_api.sql: hai session treo.
+echo "[5] script .sql thieu EXIT o cuoi"
+N5=0
+for f in ./*.sql; do
+  [ -e "$f" ] || continue
+  # Chi xet script dang duoc chay bang sqlplus @file: co dong SET/PROMPT/
+  # WHENEVER o dau. Doan SQL de nhung thi khong can EXIT.
+  grep -qiE "^(SET |PROMPT |WHENEVER )" "$f" || continue
+  if ! tail -5 "$f" | grep -qiE '^(EXIT|QUIT)'; then
+    echo "    $f"
+    N5=$((N5+1))
+  fi
+done
+if [ "$N5" -gt 0 ]; then
+  echo "    -> them EXIT vao cuoi, neu khong sqlplus se treo cho input"
+  BAD=$((BAD+N5))
+else
+  echo "    OK"
+fi
+
 echo
 if [ "$BAD" -eq 0 ]; then echo "lint: SACH"; else echo "lint: $BAD LOI"; fi
 exit "$BAD"

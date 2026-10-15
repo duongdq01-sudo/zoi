@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Tham số &mdash; ggadmin{% endblock %}
+{% block body %}
+<h3>File tham số của GoldenGate</h3>
+
+<form method="get" action="/params">
+  <select name="process" onchange="this.form.submit()" style="max-width:16rem">
+    <option value="">-- chọn tiến trình --</option>
+    {% for p in danh_sach %}
+    <option value="{{ p }}" {{ 'selected' if p == process else '' }}>{{ p }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+{% if cur %}
+<article>
+  <header>
+    <strong><code>{{ cur.path }}</code></strong>
+    <small class="muted">chữ ký {{ cur.sha_short }} &middot; sửa lúc
+      {{ cur.mtime|hhmm }} &middot; {{ cur.n_table }} dòng TABLE,
+      {{ cur.n_map }} dòng MAP
+      {% if cur.alias %}&middot; <code>USERIDALIAS {{ cur.alias }}</code>{% endif %}</small>
+  </header>
+
+  {% if proc and proc.status != 'STOPPED' %}
+  <p class="bad"><strong>{{ process }} đang {{ proc.status }}.</strong>
+  Không sửa được tham số của tiến trình đang chạy. Tiến trình chỉ đọc tham số
+  <strong>lúc khởi động</strong>, nên sửa lúc đang chạy là tạo ra một thay đổi
+  có hiệu lực ở <strong>thời điểm không ai đoán được</strong> &mdash; lần chạy
+  lại bất kỳ về sau, kể cả lần chạy lại ngoài ý muốn lúc 2 giờ sáng.</p>
+  <p><a href="/control" role="button" class="outline">Sang trang Điều khiển để
+    dừng tiến trình trước</a></p>
+  {% endif %}
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="PARAM_SAVE">
+    <input type="hidden" name="target" value="{{ process }}">
+    <input type="hidden" name="expect_sha" value="{{ cur.sha256 }}">
+    <textarea name="payload" class="prm" spellcheck="false"
+      {{ 'disabled' if proc and proc.status != 'STOPPED' else '' }}>{{ cur.text }}</textarea>
+    <input type="text" name="reason" placeholder="lý do thay đổi (từ 10 ký tự)"
+           required minlength="10">
+    <button type="submit" {{ 'disabled' if proc and proc.status != 'STOPPED' else '' }}>
+      Xem thay đổi rồi xác nhận</button>
+  </form>
+</article>
+
+<div id="khung"></div>
+
+<h4>Những gì không cho vào file tham số</h4>
+<ul><small>
+<li><code>USERID ... PASSWORD</code> &mdash; mật khẩu để dạng rõ. Hệ này đã được
+  đưa về <strong>0/7</strong> file có mật khẩu rõ; một lần sửa tham số không
+  được phép làm thoái lui.</li>
+<li>Bỏ <code>USERIDALIAS</code> khi bản cũ đã có &mdash; tiến trình sẽ không
+  đăng nhập được vào DB.</li>
+<li><code>MEGABYTES</code> trên <em>tham số</em> <code>EXTTRAIL</code> &mdash;
+  nó chỉ hợp lệ trên <em>lệnh</em> <code>ADD EXTTRAIL</code>. Đã gặp thật:
+  <code>unrecognized keyword or extra value "MEGABYTES"</code>.</li>
+<li><code>HANDLECOLLISIONS</code> đặt <strong>toàn cục</strong> &mdash; sẽ âm
+  thầm bỏ qua lỗi trên mọi bảng, kể cả bảng đang chạy ổn định. Phải đặt trên
+  từng dòng <code>MAP</code> đang nạp.</li>
+<li>Giảm số dòng <code>MAP</code> &mdash; bỏ MAP trong khi dòng
+  <code>TABLE</code> còn lại là mất dữ liệu im lặng.</li>
+</small></ul>
+
+{% if bak %}
+<h4>Bản lưu trên đĩa ({{ bak|length }})</h4>
+<table role="grid">
+<thead><tr><th>File</th><th>Byte</th><th>Thời điểm</th></tr></thead>
+<tbody>
+{% for b in bak[:12] %}
+<tr><td><code>{{ b.name }}</code></td><td>{{ b.bytes|songuyen }}</td>
+    <td>{{ b.mtime|hhmm }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% endif %}
+{% endif %}
+
+{% if lich_su %}
+<h4>Lịch sử sửa tham số</h4>
+<table role="grid">
+<thead><tr><th>Lúc</th><th>Tiến trình</th><th>Bởi</th><th>Lý do</th>
+  <th>Kiểm cú pháp</th><th>Bản lưu</th></tr></thead>
+<tbody>
+{% for h in lich_su %}
+<tr>
+  <td>{{ h.ts|hhmm }}</td>
+  <td><code>{{ h.process }}</code></td>
+  <td>{{ h.changed_by }}</td>
+  <td><small>{{ h.reason }}</small></td>
+  <td class="{{ 'ok' if h.checkprm_ok else 'bad' }}">
+    {{ 'ĐẠT' if h.checkprm_ok else 'KHÔNG ĐẠT' }}
+    {% if h.restored %}<br><small class="warn">đã tự phục hồi</small>{% endif %}</td>
+  <td><small>{{ (h.backup_path or '').rsplit('/', 1)[-1] }}</small></td>
+</tr>
+{% endfor %}
+</tbody></table>
+<p><small class="muted">Quy trình ghi: lưu bản cũ kèm thời điểm &rarr; ghi
+  nguyên tử (file tạm rồi thay chỗ) &rarr; kiểm cú pháp bằng
+  <code>checkprm</code> &rarr; không đạt thì <strong>tự phục hồi</strong> từ bản
+  lưu. Bản đã áp cũng được lưu vào <code>scripts/</code> &mdash; công cụ không
+  được là hộp đen.</small></p>
+{% endif %}
+{% endblock %}

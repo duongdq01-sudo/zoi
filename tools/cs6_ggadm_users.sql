@@ -354,3 +354,7 @@ PROMPT
 
 SET ECHO OFF
 PROMPT === HET ===
+
+-- EXIT la BAT BUOC o cuoi script chay bang `sqlplus @file`: thieu no thi
+-- sqlplus chay het script roi CHO INPUT o dau nhac SQL va treo vinh vien.
+EXIT

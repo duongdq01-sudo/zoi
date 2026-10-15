@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Cảnh báo &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>Kênh gửi cảnh báo</h4>
+<p>
+  Đang bật: {% for k in kenh %}<code>{{ k }}</code>&nbsp;{% endfor %}
+  {% if kenh|length == 1 %}
+  <br><small class="warn">Chỉ có kênh <code>log</code> &mdash; cảnh báo KHÔNG
+  ra khỏi server. Phải cấu hình <code>[notify.webhook]</code> hoặc
+  <code>[notify.zalo_oa]</code> trong <code>conf/app.toml</code>.</small>
+  {% endif %}
+</p>
+<p><small class="muted">Chống trùng lặp: mỗi cảnh báo chỉ gửi 1 lần khi MỞ, 1
+lần khi ĐÓNG; cảnh báo nặng còn mở thì nhắc lại mỗi 60 phút; vượt 20 tin/giờ
+thì gom thành một tin tổng hợp. Không có các chốt này thì công cụ tự biến
+thành nguồn nhiễu.</small></p>
+{% if user and user.role == 'ADMIN' %}
+<form hx-post="/notify/test" hx-target="#kq" hx-swap="innerHTML">
+  <label for="test-message">Nội dung tin thử</label>
+  <textarea id="test-message" name="message" rows="3" maxlength="1000"
+    aria-describedby="test-message-help" placeholder="Nhập nội dung muốn gửi..."></textarea>
+  <small id="test-message-help" class="muted">Tối đa 1.000 ký tự. Để trống để gửi tin thử mặc định đến các kênh đang bật.</small>
+  <button type="submit">Gửi tin thử</button>
+</form>
+<div id="kq"></div>
+{% endif %}
+<h4>100 lần gửi gần nhất</h4>
+<table role="grid">
+<thead><tr><th>Giờ</th><th>Kênh</th><th>Loại</th><th>Luật</th><th>Đối tượng</th>
+<th>Kết quả</th><th>Chi tiết</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr><td>{{ r.ts|hhmm }}</td><td><code>{{ r.channel }}</code></td><td>{{ r.kind }}</td>
+<td>{{ r.rule_name or '-' }}</td><td>{{ r.scope_key or '-' }}</td>
+<td class="{{ 'ok' if r.ok else 'bad' }}">{{ 'OK' if r.ok else 'LỖI' }}</td>
+<td><small>{{ r.detail or '' }}</small></td></tr>
+{% endfor %}
+{% if not rows %}<tr><td colspan="7"><small>Chưa gửi lần nào.</small></td></tr>{% endif %}
+</tbody></table>
+{% endblock %}

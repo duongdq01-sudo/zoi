@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Việc chạy &mdash; ggadmin{% endblock %}
+{% block body %}
+<h3>Việc chạy nền</h3>
+<p><small class="muted">Việc dài không chạy trong tiến trình web: đóng browser
+hay mất mạng thì nó <strong>vẫn chạy</strong>, và vẫn theo dõi được bằng
+<code>tail -f</code> trên server.
+<br>Tối đa <strong>một</strong> việc nạp hoặc đối chiếu trên toàn hệ. Lý do:
+RAM trống chỉ khoảng 6 GB mà <code>ORA_HASH</code> trên bảng 256 triệu dòng
+ngốn bộ nhớ đáng kể &mdash; để nhiều việc chạy song song thì chính công cụ
+giám sát sẽ gây ra sự cố nó đang giám sát.</small></p>
+
+<table role="grid">
+<thead><tr>
+  <th>#</th><th>Loại</th><th>Trạng thái</th><th>Bắt đầu</th><th>Xong lúc</th>
+  <th>Bởi</th><th>Tiến độ</th><th>Kết quả</th>
+</tr></thead>
+<tbody>
+{% for j in rows %}
+<tr>
+  <td>{{ j.id }}</td>
+  <td><code>{{ j.kind }}</code></td>
+  <td class="{{ 'ok' if j.state == 'SUCCEEDED' else ('bad' if j.state in ('FAILED','KILLED') else 'warn') }}">
+    {{ j.state }}</td>
+  <td>{{ j.created_at|hhmm }}</td>
+  <td>{{ j.finished_at|hhmm if j.finished_at else '-' }}</td>
+  <td>{{ j.created_by }}</td>
+  <td>
+    {% if j.progress_pct is not none %}{{ j.progress_pct }}%{% endif %}
+    {% if j.progress_note %}<br><small class="muted">{{ j.progress_note }}</small>{% endif %}
+  </td>
+  <td>
+    {% if j.err_msg %}<small class="bad">{{ j.err_msg }}</small>
+    {% elif j.result_json %}<small><code>{{ j.result_json[:220] }}</code></small>
+    {% else %}-{% endif %}
+  </td>
+</tr>
+{% endfor %}
+{% if not rows %}
+<tr><td colspan="8"><small class="muted">Chưa có việc nào.</small></td></tr>
+{% endif %}
+</tbody></table>
+
+<p><small class="muted">
+Việc đối chiếu chế độ <strong>chuẩn</strong> dừng tạm cả luồng:
+<code>dừng Extract</code> &rarr; chờ chảy hết (<code>rba</code> = kích thước
+file trail <strong>và</strong> lag về <code>00:00:00</code>) &rarr;
+<code>dừng Replicat</code> &rarr; đọc mốc <strong>High</strong> Watermark &rarr;
+so sánh &rarr; chạy lại (Replicat trước, Extract sau).
+Luồng được chạy lại <strong>trong mọi trường hợp</strong>, kể cả khi việc đối
+chiếu bị lỗi hoặc bị huỷ &mdash; để một luồng production dừng sau một việc đo
+đạc thì hỏng nặng hơn hẳn việc không đo được.
+</small></p>
+{% endblock %}

@@ -1,0 +1,44 @@
+{#
+  NUT KHOI PHUC AN TOAN - dung lai duoc o nhieu trang.
+
+  La MACRO chu khong phai include: macro nhan tham so TUONG MINH. Voi
+  `include ... with context`, mot bien dat bang `{% set %}` ben trong mot
+  vong `{% for %}` co the KHONG den duoc template con - day la cho vap quen
+  cua Jinja, va no se vap im lang: nut hien ra nhung `luong` rong, bam vao
+  thi khoi phuc SAI luong.
+
+  Cach dung:
+    {% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+    {{ nut_khoiphuc(r.stream) }}
+    {{ nut_khoiphuc(luong_loi, gon=true) }}
+
+  Vi sao la form POST thang vao /action/arm chu khong phai link rieng: moi
+  duong ghi cua he nay di qua DUNG MOT cho (arm -> fire). Them mot endpoint
+  rieng cho nut nay la them mot cho co the quen mot lop kiem.
+#}
+{% macro nut_khoiphuc(luong, gon=false) -%}
+{% if luong %}
+<form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML"
+      style="margin:0">
+  <input type="hidden" name="op" value="KHOI_PHUC">
+  <input type="hidden" name="target" value="{{ luong }}">
+  <input type="hidden" name="reason"
+         value="khôi phục an toàn luồng {{ luong }} sau lỗi">
+  <button type="submit" class="contrast"
+          style="margin:0{% if gon %};padding:.3rem .7rem;font-size:.85rem{% endif %}">
+    Khôi phục an toàn luồng {{ luong }}
+  </button>
+  {% if not gon %}
+  <small class="muted">Công cụ <strong>khám trước</strong> rồi mới chạy, và
+    hiện rõ sẽ chạy lệnh nào trước khi anh xác nhận. Nó chỉ
+    <strong>chạy hoặc dừng tiến trình</strong> &mdash; không sửa tham số,
+    không xoá bảng, không chạm mốc checkpoint, nên bấm vào không làm tình
+    hình xấu thêm được.
+    <br>Thứ tự ưu tiên của nó: <strong>không mất dữ liệu</strong> trước, rồi
+    mới đến chạy lại được, cuối cùng mới đến độ trễ. Nên nếu luồng đang
+    thiếu dòng MAP thì nó sẽ <strong>DỪNG</strong> chứ không chạy &mdash; và
+    nói rõ vì sao.</small>
+  {% endif %}
+</form>
+{% endif %}
+{%- endmacro %}

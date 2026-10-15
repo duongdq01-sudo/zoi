@@ -1,0 +1,85 @@
+{# Khung xac nhan. Day la noi toan bo nghi thuc L1/L2 hien ra. #}
+<article class="xacnhan {{ 'l1' if p.level == 'L1' else '' }}" id="xacnhan">
+  <header>
+    <strong>{{ p.level }} &mdash; {{ nhan }}</strong>
+    {% if p.target %}<code>{{ p.target }}</code>{% endif %}
+  </header>
+
+  <p><small class="muted">Lý do đã ghi:</small> {{ p.reason }}</p>
+
+  {% include "_preflight.html" %}
+
+  {% if xt_tho and not dif %}
+  <p><strong>Lệnh / câu SQL sẽ chạy</strong></p>
+  <pre class="diff">{{ xt_tho }}</pre>
+  {% endif %}
+
+  {% if dif %}
+  <p><strong>Thay đổi chính xác sẽ được ghi</strong></p>
+  <pre class="diff">{% for l in dif.splitlines() %}{% if l.startswith('+') and not l.startswith('+++') %}<span class="add">{{ l }}</span>
+{% elif l.startswith('-') and not l.startswith('---') %}<span class="del">{{ l }}</span>
+{% else %}{{ l }}
+{% endif %}{% endfor %}</pre>
+  {% if p.extra.stats %}
+  {% set st = p.extra.stats %}
+  <p><small>
+    thêm {{ st.them }} / bỏ {{ st.xoa }} dòng &middot;
+    TABLE {{ st.table_truoc }} &rarr; {{ st.table_sau }} &middot;
+    MAP {{ st.map_truoc }} &rarr; {{ st.map_sau }}
+    {% if st.map_sau < st.map_truoc %}<span class="bad">&mdash; GIẢM SỐ MAP</span>{% endif %}
+  </small></p>
+  {% endif %}
+  {% endif %}
+
+  <form hx-post="/action/fire" hx-target="#xacnhan" hx-swap="outerHTML">
+    <input type="hidden" name="token" value="{{ p.token }}">
+
+    {% if p.level == 'L2' %}
+    {% set can_go = p.extra.get('go_tay') or p.target %}
+    <fieldset>
+      <label>
+        Gõ tay <strong><code>{{ can_go }}</code></strong> để xác nhận
+        <input type="text" name="typed" autocomplete="off" required
+               onpaste="return false" ondrop="return false"
+               placeholder="gõ đúng {{ can_go }}, ô này không dán được">
+      </label>
+      <small class="muted">Ô này chặn dán. Gõ tay là để buộc đọc lại tên một
+        lần nữa &mdash; thao tác mức L2 không hoàn tác được.</small>
+    </fieldset>
+    {% endif %}
+
+    <button type="submit" {% if not pf.ok %}disabled{% endif %}
+            class="{{ 'contrast' if p.level == 'L2' else '' }}">
+      {% if pf.ok %}Chạy{% else %}Kiểm tra trước không đạt &mdash; không chạy được{% endif %}
+    </button>
+    <button type="button" class="secondary outline"
+            onclick="document.getElementById('xacnhan').remove()">Huỷ</button>
+    <span>&nbsp;Còn <span class="dem" id="dem">{{ p.con_lai_s }}</span>s để xác nhận</span>
+  </form>
+
+  <p><small class="muted">
+    Lần xác nhận này hết hạn sau 60 giây. Không phải để chống kẻ tấn công
+    &mdash; ai vào được giao diện thì đã có SSH. Mà để chống chính người dùng:
+    mở tab xác nhận lúc 9h, đi họp, 11h quay lại bấm tiếp trong khi trạng thái
+    hệ thống đã khác hẳn. Phần kiểm tra trước sẽ được <strong>đo lại</strong>
+    ngay trước khi chạy.
+  </small></p>
+</article>
+<script>
+(function () {
+  var el = document.getElementById("dem");
+  if (!el) return;
+  var n = parseInt(el.textContent, 10);
+  var t = setInterval(function () {
+    n -= 1;
+    if (n <= 0) {
+      clearInterval(t);
+      el.textContent = "0";
+      var f = el.closest("article").querySelector("button[type=submit]");
+      if (f) { f.disabled = true; f.textContent = "Đã hết hạn - làm lại từ đầu"; }
+      return;
+    }
+    el.textContent = n;
+  }, 1000);
+})();
+</script>

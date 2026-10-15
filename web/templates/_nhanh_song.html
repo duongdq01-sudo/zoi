@@ -1,0 +1,119 @@
+{% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{#
+  Theo doi SONG mot luot thao tac nhanh. Fragment htmx, tu cap nhat 3s.
+
+  LUON tu cap nhat, nhung NHIP KHAC NHAU: 3 giay khi dang co luot chay,
+  10 giay khi ranh. Khong de "het phien thi thoi poll": nguoi dung bam chay
+  xong la khung nay dung yen cho den khi F5 - dung cai no sinh ra de tranh.
+#}
+{% set co_chay = phien | selectattr('dang_chay') | list %}
+<div hx-get="/nhanh/song" hx-swap="outerHTML"
+     hx-trigger="load delay:{{ '3s' if co_chay else '10s' }}">
+
+{% if not phien %}
+<article>
+  <header><strong>Theo dõi lượt đang chạy</strong></header>
+  <p><small class="muted">Không có quy trình nào đang mở. Khi anh chạy một
+    thao tác nhanh, khung này hiện từng bước đang làm gì &mdash; lệnh sắp
+    chạy, kết quả, và đuôi log của việc chạy nền &mdash; tự cập nhật mỗi 3 giây
+    trong lúc chạy, 10 giây khi rảnh.</small></p>
+</article>
+{% endif %}
+
+{% for p in phien %}
+{% set r = p.run %}
+{% set dung = r.note and 'dừng' in r.note %}
+<article style="border-left:5px solid {{ 'var(--danger)' if dung else ('var(--orange-500)' if p.dang_chay else 'var(--blue-500)') }}">
+  <header>
+    <strong>Quy trình #{{ r.id }}</strong>
+    <code>{{ r.kind }}</code> trên <code>{{ r.src_table }}</code>
+    <small class="muted">luồng {{ r.stream }} &middot; mở bởi {{ r.created_by }}
+      lúc {{ r.created_at|hhmm }}</small>
+    <span class="pill {{ 'bad' if dung else ('warn' if p.dang_chay else '') }}"
+          style="float:right">
+      {% if dung %}ĐÃ DỪNG
+      {% elif p.dang_chay %}ĐANG CHẠY TỰ ĐỘNG
+      {% else %}ĐANG MỞ, không tự chạy{% endif %}
+    </span>
+  </header>
+
+  <div class="kv">
+    <b>Bước</b>
+    <span><strong>{{ r.cur_step }}</strong> / {{ p.tong }}
+      <progress value="{{ r.cur_step - 1 }}" max="{{ p.tong }}"
+                style="width:12rem;vertical-align:middle"></progress>
+      {{ ((r.cur_step - 1) * 100 // p.tong) }}%</span>
+    {% if dung %}
+    <b>Lý do dừng</b><span class="bad">{{ r.note }}</span>
+    {% endif %}
+  </div>
+
+  {% if not p.buoc %}
+  <p><small class="muted">Chưa có bước nào chạy.</small></p>
+  {% endif %}
+
+  {% for b in p.buoc | reverse %}
+  {# Buoc moi nhat len TREN: cai dang chay la cai can thay ngay, khong phai
+     cuon xuong duoi moi thay. #}
+  <details {% if b.state in ('DANG', 'FAIL') or loop.first %}open{% endif %}
+           style="border-top:1px solid var(--slate-200);padding:.4rem 0">
+    <summary>
+      <code>{{ '%02d'|format(b.step_no) }}</code>
+      <strong>{{ b.nhan }}</strong>
+      <span class="{{ 'ok' if b.state == 'PASS' else ('bad' if b.state == 'FAIL' else 'warn') }}">
+        {{ {'PASS':'xong','FAIL':'lỗi','DANG':'đang chạy'}.get(b.state, b.state) }}</span>
+      <small class="muted">
+        {% if b.started_at %}{{ b.started_at|hhmm }}{% endif %}
+        {% if b.finished_at and b.started_at %}
+          &middot; {{ b.finished_at - b.started_at }}s{% endif %}
+        {% if b.job_id %}&middot; việc nền #{{ b.job_id }}{% endif %}
+      </small>
+    </summary>
+
+    {% if b.err_msg %}
+    <p class="bad"><small>{{ b.err_msg }}</small></p>
+    {% endif %}
+
+    {% if b.preview %}
+    <p><small class="muted">Lệnh / SQL đã chạy</small></p>
+    <pre class="log" style="max-height:14rem">{{ b.preview }}</pre>
+    {% endif %}
+
+    {% if b.log %}
+    <p><small class="muted">Đuôi log việc nền
+      {% if b.job_id %}&mdash; <code>tail -f logs/job_{{ b.job_id }}.log</code>{% endif %}
+    </small></p>
+    <pre class="log" style="max-height:14rem">{% for l in b.log %}{{ l }}
+{% endfor %}</pre>
+    {% endif %}
+
+    {% if b.output %}
+    <p><small class="muted">Kết quả</small></p>
+    <pre class="log" style="max-height:16rem">{{ b.output }}</pre>
+    {% endif %}
+  </details>
+  {% endfor %}
+
+  {% if dung %}
+  <div style="margin:.6rem 0;padding:.6rem;border:2px solid var(--danger);border-radius:8px">
+    <strong class="bad">Việc đầu tiên: đưa luồng về an toàn</strong>
+    <p><small>Lượt này dừng giữa đường, nên luồng <code>{{ r.stream }}</code>
+      có thể đang ở trạng thái nửa vời. Chạy cái này <strong>trước</strong>
+      khi tìm nguyên nhân.</small></p>
+    {{ nut_khoiphuc(r.stream) }}
+  </div>
+  {% endif %}
+
+  <p style="margin-top:.6rem">
+    <a href="/wizard/{{ r.id }}" role="button" class="outline">Mở trang quy trình</a>
+    {% if dung %}
+    <small class="muted">&nbsp;Dừng giữa đường thì công cụ
+      <strong>không hoàn tác</strong> các bước đã xong &mdash; chúng vẫn có
+      hiệu lực thật. Mở trang quy trình và đi tiếp bằng tay từ đúng bước đang
+      dừng.</small>
+    {% endif %}
+  </p>
+</article>
+{% endfor %}
+
+</div>
