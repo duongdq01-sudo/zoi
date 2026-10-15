@@ -540,6 +540,7 @@ OPS: dict[str, tuple[str, str, str]] = {
     # Xem app/auto.py de biet cai gi duoc danh doi va cai gi thi khong.
     "AUTO_ADD_TABLE":    (L2, "KHONG_CO",          "Thao tác nhanh: thêm bảng vào luồng"),
     "AUTO_RESYNC":       (L2, "KHONG_CO",          "Thao tác nhanh: đồng bộ lại bảng"),
+    "AUTO_TIEP":         (L2, "KHONG_CO",          "Thao tác nhanh: chạy tiếp phiên đang dừng"),
     # Khoi phuc an toan: CHI start/stop, nen hoan tac duoc -> L1.
     # Khong phai L2: khi dang co su co, bat go tay ten bang la dat them ma
     # sat vao dung luc can nhanh nhat, ma khong doi lay them an toan nao -
@@ -561,6 +562,12 @@ def _pf_cua(op: str, target: str) -> tuple[str, str]:
         # tac chi doc", hien dong do truoc mot luot co the xoa sach bang la
         # gay nham theo huong nguy hiem nhat.
         return "AUTO", target
+    if op == "AUTO_TIEP":
+        # Phien dang dung o buoc nao thi do pre-flight cua DUNG buoc do -
+        # giong het duong bam tay, vi lat nua bo lai se chay chinh no.
+        run = wizard.lay(int(target))
+        pf_op, pf_target = wizard.pf_cua_buoc(int(target), run["cur_step"])
+        return (pf_op or "KHONG_CO"), pf_target
     if op == "KHOI_PHUC":
         return "KHOI_PHUC", target
     if op == "WIZARD_ROLLBACK":
@@ -580,7 +587,8 @@ def _pf_cua(op: str, target: str) -> tuple[str, str]:
 @app.post("/action/arm", response_class=HTMLResponse)
 async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                      reason: str = Form(""), payload: str = Form(""),
-                     expect_sha: str = Form(""), stream_sel: str = Form("")):
+                     expect_sha: str = Form(""), stream_sel: str = Form(""),
+                     keycols: str = Form("")):
     u = current_user(req)
     if not u:
         return HTMLResponse("<p>Chưa đăng nhập</p>", status_code=401)
@@ -629,7 +637,19 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
             return _deny_html(e, 400)
         # Go tay TEN BANG - nghi thuc L2 DUY NHAT cua ca luot.
         extra = {"go_tay": (target or "").strip().upper(),
-                 "stream": (payload or stream_sel or "").strip()}
+                 "stream": (payload or stream_sel or "").strip(),
+                 "keycols": keycols.strip().upper()}
+        dif = ""
+    if op == "AUTO_TIEP":
+        # Chay tiep mot phien dang dung. Van la L2 va van go tay TEN BANG
+        # cua phien do: "chay tiep" co the di thang vao buoc khong hoan tac
+        # duoc, nen khong duoc re hon mot luot moi.
+        try:
+            run_tiep = tudong.kiem_tiep(int(target))
+        except (auto.AutoError, ValueError) as e:
+            return _deny_html(e, 400)
+        extra = {"go_tay": run_tiep["src_table"],
+                 "keycols": keycols.strip().upper()}
         dif = ""
     if op == "WIZARD_ROLLBACK":
         try:
@@ -853,7 +873,8 @@ async def _thuc_thi(p, who: str) -> dict:
         import asyncio as _a
         kind = "ADD_TABLE" if op == "AUTO_ADD_TABLE" else "RESYNC_TABLE"
         rid = tudong.mo_phien(kind, t.strip().upper(),
-                              stream=p.extra.get("stream") or "", who=who)
+                              stream=p.extra.get("stream") or "", who=who,
+                              keycols=p.extra.get("keycols") or "")
         _a.create_task(tudong.chay(rid, who=who, ly_do=p.reason))
         return {"msg": "Đã mở quy trình #%s và bắt đầu chạy tự động. Mỗi bước "
                        "vẫn phải đạt mới sang bước sau; bước nào không đạt thì "
@@ -867,6 +888,24 @@ async def _thuc_thi(p, who: str) -> dict:
                     "TỪNG bước mức L2 - gộp thành một lần xác nhận cho cả lượt.",
                     "Mỗi bước vẫn ghi một dòng vết thao tác AUTO_STEP.",
                     "",
+                    "/wizard/%s" % rid]}
+
+    if op == "AUTO_TIEP":
+        import asyncio as _a
+        rid = int(t)
+        tudong.kiem_tiep(rid)          # do lai: 60 giay vua roi co the da doi
+        kc = p.extra.get("keycols") or ""
+        if kc:
+            tudong.dat_keycols(rid, kc)
+        _a.create_task(tudong.chay(rid, who=who, ly_do=p.reason))
+        return {"msg": "Phiên #%s chạy tiếp từ bước đang dừng. Theo dõi ở "
+                       "khung bên trên." % rid,
+                "chi_tiet": [
+                    "Chay tiep KHONG chay lai tu dau: cac buoc da dat van giu",
+                    "nguyen, bo lai di tu dung buoc dang dung.",
+                    ""] + (["KEYCOLS dat truoc: %s" % kc,
+                            "Buoc xac nhan cot khoa VAN kiem tinh duy nhat tren",
+                            "du lieu that va dem NULL tung cot khoa.", ""] if kc else []) + [
                     "/wizard/%s" % rid]}
 
     if op == "REGISTRY_ADD":
@@ -1068,7 +1107,7 @@ async def nhanh_song(req: Request):
     if not current_user(req):
         return HTMLResponse("")
     mo = [dict(r) for r in con.execute(
-        "SELECT id, kind, state, stream, src_table, cur_step, note,"
+        "SELECT id, kind, state, stream, src_table, cur_step, note, keycols,"
         " created_at, created_by FROM wizard_run WHERE state='OPEN'"
         " ORDER BY id DESC LIMIT 3")]
     phien = []

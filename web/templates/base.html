@@ -142,5 +142,20 @@
 </div>
 
 </div>
+
+{# htmx 1.9 mac dinh KHONG swap than response 4xx/5xx: no coi do la loi va
+   bo qua. Ma gan het thong bao TU CHOI cua cong cu deu tra 4xx kem mot the
+   <p class='bad'> giai thich - nghia la nguoi dung bam nut, bi tu choi, va
+   MAN HINH KHONG DOI GI CA. Da gap that 2026-10-15 o trang Chay tu dong.
+   Cho swap ca response loi: ly do tu choi phai hien ra dung cho no se hien
+   neu thanh cong. #}
+<script>
+document.body.addEventListener("htmx:beforeSwap", function (e) {
+  if (e.detail.xhr && e.detail.xhr.status >= 400) {
+    e.detail.shouldSwap = true;
+    e.detail.isError = false;
+  }
+});
+</script>
 </body>
 </html>

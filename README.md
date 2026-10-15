@@ -156,7 +156,7 @@ Sáu `OPS` hiện có: `START` · `STOP` · `ADD_TRANDATA` · `PARAM_SAVE` (L1) 
 | **L1** hoàn tác được | start/stop, `add trandata`, ghi param | diff chính xác + lý do ≥10 ký tự |
 | **L2** không hoàn tác | verify `SNAPSHOT_SCN`, restart có thứ tự | **toàn bộ** nghi thức bên dưới |
 
-Nghi thức L2, thiếu một là không mở được nút: **gõ tay** tên đối tượng (ô nhập chặn `onpaste`) · pre-flight **PASS** · lý do bắt buộc · **token hết hạn 60 giây** · audit ghi **trước** khi thực thi.
+Nghi thức L2, thiếu một là không mở được nút: **nhập lại** tên đối tượng (máy chủ đối chiếu chuỗi này với đối tượng sắp bị tác động; ô nhập **cho dán** từ 2026-10-15, theo yêu cầu người dùng) · pre-flight **PASS** · lý do bắt buộc · **token hết hạn 60 giây** · audit ghi **trước** khi thực thi.
 
 Token 60 giây không phải để chống kẻ tấn công — ai vào được UI thì đã có SSH. Nó để chống **chính người dùng**: mở tab xác nhận lúc 9h, đi họp, 11h quay lại bấm tiếp trong khi trạng thái hệ thống đã khác hẳn. `fire` **đo lại pre-flight** ngay trước khi chạy và từ chối nếu kết quả đã đổi.
 

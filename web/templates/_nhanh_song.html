@@ -104,6 +104,30 @@
   </div>
   {% endif %}
 
+  {% if not p.dang_chay %}
+  {# CHAY TIEP: phien dung giua duong thi khong bat di lai tu dau va cung
+     khong bat bam tay 16 buoc con lai. Van la nghi thuc L2 day du (go tay
+     ten bang, token 60 giay, pre-flight cua DUNG buoc sap chay) vi buoc ke
+     tiep co the la buoc khong hoan tac duoc. #}
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML"
+        style="margin-top:.6rem">
+    <input type="hidden" name="op" value="AUTO_TIEP">
+    <input type="hidden" name="target" value="{{ r.id }}">
+    {% if r.cur_step == 2 and not r.keycols %}
+    <label>KEYCOLS &mdash; các cột khoá, cách nhau bằng dấu phẩy
+      <input type="text" name="keycols" placeholder="VÍ DỤ: MA_DVI, MA_KENH"
+             style="text-transform:uppercase">
+    </label>
+    <small class="muted">Bảng không có khoá chính thật thì phải nhập ở đây,
+      lượt chạy mới qua được bước 2. Bộ cột vẫn được kiểm tính duy nhất trên
+      dữ liệu thật và đếm NULL từng cột.</small>
+    {% endif %}
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do chạy tiếp (từ 10 ký tự)">
+    <button type="submit" class="contrast">Chạy tiếp từ bước {{ r.cur_step }}</button>
+  </form>
+  {% endif %}
+
   <p style="margin-top:.6rem">
     <a href="/wizard/{{ r.id }}" role="button" class="outline">Mở trang quy trình</a>
     {% if dung %}

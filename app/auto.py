@@ -107,7 +107,8 @@ class TuDong:
         self.dang_chay: set[int] = set()
 
     # --------------------------------------------------------------- mo phien
-    def mo_phien(self, kind: str, bang: str, *, stream: str, who: str) -> int:
+    def mo_phien(self, kind: str, bang: str, *, stream: str, who: str,
+                 keycols: str = "") -> int:
         """Mo phien quy trinh. Raise AutoError neu khong du dieu kien."""
         r = kiem_dieu_kien(self.con, kind, bang)
         lu = (r["stream"] or stream or "").strip()
@@ -118,9 +119,44 @@ class TuDong:
                 "cạnh. Công cụ CỐ Ý không tự đoán luồng: đoán sai là thêm "
                 "bảng vào sai Extract." % bang)
         try:
-            return self.wizard.tao(kind, stream=lu, src_table=bang, who=who)
+            rid = self.wizard.tao(kind, stream=lu, src_table=bang, who=who)
         except Exception as e:                                # noqa: BLE001
             raise AutoError(str(e)) from e
+        if keycols.strip():
+            self.dat_keycols(rid, keycols)
+        return rid
+
+    def dat_keycols(self, rid: int, keycols: str) -> None:
+        """Dat truoc KEYCOLS cho phien, de buoc 2 khong phai dung lai doi nguoi.
+
+        KHONG phai duong vong qua kiem chung. Buoc XAC_NHAN_KEYCOLS van chay
+        day du: cot co that o nguon khong, co DUY NHAT tren DU LIEU THAT
+        khong, va tung cot khoa co bao nhieu dong NULL. Dat truoc chi thay
+        cho viec go vao o cua buoc 2 - cot khoa sai thi buoc 2 van chan.
+        """
+        kc = ", ".join(c.strip().upper() for c in keycols.split(",") if c.strip())
+        self.con.execute(
+            "UPDATE wizard_run SET keycols=?, updated_at=? WHERE id=?",
+            (kc, int(time.time()), rid))
+
+    def kiem_tiep(self, rid: int) -> dict:
+        """Kiem truoc khi chay tiep mot phien dang dung. Tra run, hoac raise.
+
+        Chay tiep KHONG phai chay lai: bo lai doc `cur_step` cua phien va di
+        tu dung buoc dang dung, cac buoc da PASS khong dung lai lan nua.
+        """
+        try:
+            run = self.wizard.lay(rid)
+        except Exception as e:                                # noqa: BLE001
+            raise AutoError(str(e)) from e
+        if run["state"] != "OPEN":
+            raise AutoError(
+                "Phiên #%s đã %s nên không chạy tiếp được." % (rid, run["state"]))
+        if rid in self.dang_chay:
+            raise AutoError(
+                "Phiên #%s đang chạy tự động. Đợi nó dừng rồi hẵng mở lượt "
+                "mới - hai bộ lái cùng đi trên một phiên là chồng bước." % rid)
+        return run
 
     # ----------------------------------------------------------------- bo lai
     async def chay(self, rid: int, *, who: str, ly_do: str) -> None:
@@ -128,6 +164,9 @@ class TuDong:
         if rid in self.dang_chay:
             return
         self.dang_chay.add(rid)
+        self.con.execute(
+            "UPDATE wizard_run SET note=NULL, updated_at=? WHERE id=?",
+            (int(time.time()), rid))
         t0 = time.monotonic()
         try:
             await self._chay(rid, who, ly_do, t0)

@@ -58,6 +58,17 @@ hình.
         {% endfor %}
       </select>
     </label>
+    <label>KEYCOLS &mdash; chỉ cần nhập nếu bảng KHÔNG có khoá chính thật
+      <input type="text" name="keycols" placeholder="VÍ DỤ: MA_DVI, MA_KENH"
+             style="text-transform:uppercase">
+    </label>
+    <small class="muted">Để trống nếu bảng có khoá chính thật &mdash; công cụ
+      lấy đúng các cột của khoá chính đó. Bảng chỉ có <strong>index duy
+      nhất</strong> thì công cụ CỐ Ý không tự lấy (chọn bộ khoá nào là phán
+      đoán nghiệp vụ), và không nhập ở đây thì lượt chạy sẽ dừng lại ở bước 2
+      để hỏi. Nhập ở đây <strong>không</strong> bỏ qua kiểm chứng: bước 2 vẫn
+      kiểm tính duy nhất <strong>trên dữ liệu thật</strong> và đếm số dòng
+      NULL của từng cột khoá.</small>
     <input type="text" name="reason" required minlength="10"
            placeholder="lý do (từ 10 ký tự)">
     <button type="submit" class="contrast">Chạy tự động &mdash; thêm bảng</button>

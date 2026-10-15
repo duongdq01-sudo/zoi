@@ -214,3 +214,83 @@ def khung_theo_doi_chi_doc():
     for xau in ("chay_buoc", "kiem_job", "control.", "tudong.chay",
                 "INSERT", "UPDATE", "DELETE"):
         assert xau not in than, "khung theo doi goi %r - phai CHI DOC" % xau
+
+
+# ================================ KEYCOLS dat truoc + chay tiep (2026-10-15)
+def _con_phien(**kw):
+    """DB trong bo nho voi mot dong wizard_run."""
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE wizard_run (id INTEGER PRIMARY KEY, kind TEXT,"
+              " state TEXT, stream TEXT, src_table TEXT, cur_step INT,"
+              " keycols TEXT, note TEXT, updated_at INT)")
+    d = dict(kind="ADD_TABLE", state="OPEN", stream="HT",
+             src_table="HT_MA_KENH_BAN", cur_step=2, keycols=None, note=None)
+    d.update(kw)
+    c.execute("INSERT INTO wizard_run (id,kind,state,stream,src_table,"
+              "cur_step,keycols,note,updated_at) VALUES (7,?,?,?,?,?,?,?,0)",
+              (d["kind"], d["state"], d["stream"], d["src_table"],
+               d["cur_step"], d["keycols"], d["note"]))
+    return c
+
+
+class _WizardGia:
+    def __init__(self, con):
+        self.con = con
+
+    def lay(self, rid):
+        r = self.con.execute(
+            "SELECT * FROM wizard_run WHERE id=?", (rid,)).fetchone()
+        if r is None:
+            raise RuntimeError(f"không có quy trình #{rid}")
+        return dict(r)
+
+
+def _tudong(con):
+    return auto.TuDong(cfg=None, con=con, wizard=_WizardGia(con),
+                       pre=None, auth=None, pf_cua=None)
+
+
+@test
+def dat_keycols_chuan_hoa_HOA_va_dau_phay():
+    c = _con_phien()
+    _tudong(c).dat_keycols(7, " ma_dvi ,ma_kenh,, ")
+    assert c.execute("SELECT keycols FROM wizard_run WHERE id=7"
+                     ).fetchone()[0] == "MA_DVI, MA_KENH"
+
+
+@test
+def chay_tiep_tu_choi_khi_phien_da_dong():
+    c = _con_phien(state="DONE")
+    m = _loi(lambda: _tudong(c).kiem_tiep(7))
+    assert "không chạy tiếp được" in m, m
+
+
+@test
+def chay_tiep_tu_choi_khi_phien_DANG_chay():
+    """Hai bo lai cung di tren mot phien la chong buoc."""
+    t = _tudong(_con_phien())
+    t.dang_chay.add(7)
+    m = _loi(lambda: t.kiem_tiep(7))
+    assert "đang chạy tự động" in m, m
+
+
+@test
+def chay_tiep_tu_choi_khi_khong_co_phien():
+    m = _loi(lambda: _tudong(_con_phien()).kiem_tiep(999))
+    assert "999" in m, m
+
+
+@test
+def chay_tiep_cho_qua_khi_phien_dang_mo_va_khong_ai_chay():
+    run = _tudong(_con_phien()).kiem_tiep(7)
+    assert run["cur_step"] == 2 and run["src_table"] == "HT_MA_KENH_BAN"
+
+
+@test
+def o_go_tay_L2_KHONG_con_chan_dan():
+    """Yeu cau nguoi dung 2026-10-15: cho copy/paste binh thuong."""
+    tpl = (ROOT / "web" / "templates" / "_confirm.html").read_text(encoding="utf-8")
+    assert "onpaste" not in tpl and "ondrop" not in tpl
+    # nhung ten VAN phai khop - chot that nam o may chu
+    assert 'name="typed"' in tpl

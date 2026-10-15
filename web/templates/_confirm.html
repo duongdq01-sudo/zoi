@@ -38,13 +38,15 @@
     {% set can_go = p.extra.get('go_tay') or p.target %}
     <fieldset>
       <label>
-        Gõ tay <strong><code>{{ can_go }}</code></strong> để xác nhận
+        Nhập <strong><code>{{ can_go }}</code></strong> để xác nhận
         <input type="text" name="typed" autocomplete="off" required
-               onpaste="return false" ondrop="return false"
-               placeholder="gõ đúng {{ can_go }}, ô này không dán được">
+               placeholder="nhập đúng {{ can_go }}">
       </label>
-      <small class="muted">Ô này chặn dán. Gõ tay là để buộc đọc lại tên một
-        lần nữa &mdash; thao tác mức L2 không hoàn tác được.</small>
+      <small class="muted">Dán được &mdash; theo yêu cầu người dùng
+        2026-10-15, ô này không còn chặn dán. Tên vẫn phải khớp: chốt thật
+        nằm ở chỗ máy chủ đối chiếu chuỗi này với đối tượng sắp bị tác động,
+        nên dán nhầm tên bảng khác là bị từ chối. Thao tác mức L2 không hoàn
+        tác được, đọc lại tên một lần nữa trước khi bấm.</small>
     </fieldset>
     {% endif %}
 
