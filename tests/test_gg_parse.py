@@ -621,14 +621,15 @@ def ten_extract_phai_bat_dau_bang_ET():
 
 
 @test
-def ten_replicat_KHONG_duoc_bat_dau_bang_ET():
+def ten_replicat_PHAI_bat_dau_bang_R():
     assert gg.kiem_ten_moi("rbc2", "replicat") == "RBC2"
-    try:
-        gg.kiem_ten_moi("ETX", "replicat")
-    except gg.Blocked as e:
-        assert "DB NGUỒN" in str(e), str(e)
-        return
-    raise AssertionError("Replicat ten ETX ma van qua")
+    for xau in ("ETX", "BC2", "XRBC"):
+        try:
+            gg.kiem_ten_moi(xau, "replicat")
+        except gg.Blocked as e:
+            assert "bắt đầu bằng R" in str(e), str(e)
+            continue
+        raise AssertionError(f"Replicat ten {xau} ma van qua")
 
 
 # ------------------------------------------------------------- goi y ten

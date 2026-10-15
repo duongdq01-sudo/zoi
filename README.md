@@ -288,6 +288,8 @@ Thứ tự lệnh cũng là hằng số, hai chỗ dễ đảo nhất và cả h
 
 **Hai danh sách tên, hai mục đích** (`app/adapters/gg.py`): `PROCESSES` là app được phép **điều khiển**; `BAT_KHA_XAM_PHAM` là app **không được tạo/xoá/đăng ký**. Tên của một phiên đang mở nằm ở danh sách đầu và **không** ở danh sách sau — nếu không thì chính chức năng dọn sạch của phiên bị lớp 3 chặn.
 
+**Luật đặt tên theo vai trò** (`kiem_ten_moi`, đặt **sau** lớp bất khả xâm phạm — thứ tự lớp không đảo): Extract **phải** bắt đầu bằng `ET`, Replicat **phải** bắt đầu bằng `R`. Không phải quy ước thẩm mỹ: `alias_for()`, `start_process()` và `stop_process()` suy ra vai trò từ ký tự đầu của tên, nên một Replicat tên `ETX` sẽ bị chạy bằng `start extract` và dblogin vào **DB nguồn**. Chặn từ lúc đặt tên, vì đổi tên một process đã tạo thì phải xoá đi tạo lại. Sáu quy trình đang chạy đều theo đúng luật này.
+
 **Hỏng đâu dọn đó** (yêu cầu người dùng): bộ lái tự chạy `rollback_new_stream` ngay khi một bước không đạt, ở **bất kỳ** bước nào sau khi đã chốt tên. Hiện trường trong DB của công cụ được giữ nguyên trước khi dọn, có một dòng audit `AUTO_ROLLBACK`, và **không bao giờ tự dọn lần hai**. Đánh đổi đã biết: lệnh dọn chạy `UNREGISTER EXTRACT … DATABASE` lên chính DB nguồn, và hỏng ở nửa sau thì mất cả công nạp.
 
 ### Rollback của `NEW_STREAM`

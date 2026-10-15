@@ -625,20 +625,24 @@ def kiem_ten_moi(ten: str, loai: str) -> str:
             f"{ten!r} là đối tượng ĐANG CHẠY - bất khả xâm phạm. Công cụ không tạo, "
             "không sửa, không xoá được các tên này.")
 
-    # LUAT VAI TRO - khong phai quy uoc tham my, va dat SAU lop bat kha xam
-    # pham vi thu tu lop khong duoc dao.
-    # `alias_for()`, `start_process()` va `stop_process()` suy ra EXTRACT hay
-    # REPLICAT tu HAI KY TU DAU cua ten. Mot Replicat ten "ETX" se bi chay
-    # bang `start extract` va dblogin vao DB NGUON. Chan tu luc dat ten, vi
-    # doi ten mot process da tao thi phai xoa di tao lai.
+    # LUAT VAI TRO: Extract bat dau bang ET, Replicat bat dau bang R.
+    # Dat SAU lop bat kha xam pham - thu tu lop khong duoc dao.
+    #
+    # Khong phai quy uoc tham my: `alias_for()`, `start_process()` va
+    # `stop_process()` suy ra EXTRACT hay REPLICAT tu HAI KY TU DAU cua ten.
+    # Mot Replicat ten "ETX" se bi chay bang `start extract` va dblogin vao
+    # DB NGUON. Chan tu luc dat ten, vi doi ten mot process da tao thi phai
+    # xoa di tao lai. Sau quy trinh dang chay deu theo dung luat nay
+    # (ETPMNV/ETHT/ETDTHU va RPMNVODS/RHT/RDTHU).
     if loai == "extract" and not t.startswith("ET"):
         raise Blocked(
             f"Tên Extract phải bắt đầu bằng ET (nhận được {ten!r}): lệnh start/stop "
             "và dblogin suy ra vai trò từ hai ký tự đầu của tên.")
-    if loai == "replicat" and t.startswith("ET"):
+    if loai == "replicat" and not t.startswith("R"):
         raise Blocked(
-            f"Tên Replicat KHÔNG được bắt đầu bằng ET (nhận được {ten!r}): công cụ "
-            "sẽ chạy `start extract` và đăng nhập vào DB NGUỒN.")
+            f"Tên Replicat phải bắt đầu bằng R (nhận được {ten!r}): lệnh start/stop "
+            "và dblogin suy ra vai trò từ ký tự đầu. Tên bắt đầu bằng ET sẽ bị chạy "
+            "`start extract` và đăng nhập vào DB NGUỒN.")
     return t
 
 
