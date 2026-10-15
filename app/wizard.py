@@ -221,11 +221,96 @@ NEW_STREAM: tuple[Step, ...] = (
          ghi_chu="Sinh ra khối cấu hình [streams] để thêm vào conf/app.toml."),
 )
 
-BO_BUOC = {"ADD_TABLE": ADD_TABLE, "RESYNC_TABLE": RESYNC_TABLE, "NEW_STREAM": NEW_STREAM}
+# =====================================================================
+# PHASE 5 - LUONG_MOI: tu bang chua thuoc luong nao den luong chay that,
+# du lieu da nap va da doi chieu. Mot luot, khong dut doan.
+#
+# QUAN HE VOI NEW_STREAM: dung chung 13 handler `_b_ns_*`, nhung NEW_STREAM
+# chi tao ha tang (khong tao bang dich, khong nap du lieu, va bat nguoi tu
+# dan khoi [streams] vao app.toml). LUONG_MOI tron bo: phan tao ha tang cua
+# NEW_STREAM + phan dua du lieu vao cua ADD_TABLE + mot buoc MOI tu ghi cau
+# hinh. NEW_STREAM giu nguyen cho duong bam tay tung buoc.
+#
+# BA DIEU CUA THU TU NAY KHONG DUOC DAO:
+#   1. XAC_NHAN_KEYCOLS truoc TAO_PARAM. Cot khoa duoc NHUNG THANG vao dong
+#      MAP sinh ra o TAO_PARAM va khong buoc nao sua lai dong do ve sau.
+#   2. TAO_BANG_DICH/KIEM_BANG_DICH truoc REGISTER_EXTRACT. Bay thieu quyen
+#      phai no TRUOC khi dang ky capture vao DB nguon production.
+#   3. DANG_KY_CAU_HINH truoc START_EXTRACT. Tu buoc do tro di cac handler
+#      dung chung doc `cfg.streams[run["stream"]]` va `gg.PROCESSES`.
+#
+# CO Y KHONG CO: THEM_MAP / THEM_TABLE / STOP_EXTRACT / STOP_REPLICAT truoc
+# nap. File tham so sinh o buoc 8 DA co san dong TABLE va dong MAP (kem
+# HANDLECOLLISIONS); chay lai may buoc do la NHAN DOI dong MAP. Cua so bao
+# tri ma chung sinh ra cung khong ton tai o day: Replicat moi toanh, chua
+# tung chay, nen no da dung san suot dot nap.
+# =====================================================================
+LUONG_MOI: tuple[Step, ...] = (
+    Step(1, "TIEN_DIEU_KIEN", "Điều kiện tiên quyết", L0,
+         ghi_chu="Mọi tiến trình đang chạy phải khoẻ, đĩa còn chỗ, và bộ nhớ "
+                 "streams pool đủ ở CẢ HAI đầu - luồng mới dùng chung tài nguyên đó."),
+    Step(2, "KHAO_SAT", "Khảo sát bảng ở nguồn", L0),
+    Step(3, "XAC_NHAN_KEYCOLS", "Xác nhận cột khoá (KEYCOLS)", L1,
+         ghi_chu="Phải chốt TRƯỚC bước tạo tham số: cột khoá được nhúng thẳng vào "
+                 "dòng MAP và không bước nào sửa lại dòng đó về sau."),
+    Step(4, "KIEM_TEN", "Kiểm các tên mới", L1),
+    Step(5, "TAO_BANG_DICH", "Tạo bảng ở đích (nếu chưa có)", L2),
+    Step(6, "KIEM_BANG_DICH", "Kiểm bảng đích: cấu trúc và quyền", L0,
+         ghi_chu="Thiếu quyền phải lộ ra Ở ĐÂY - tức là TRƯỚC khi đăng ký capture "
+                 "vào DB nguồn production."),
+    Step(7, "ADD_TRANDATA", "Bật TRANDATA ở nguồn", L1, pf="ADD_TRANDATA"),
+    Step(8, "TAO_PARAM", "Tạo 2 file tham số", L1,
+         ghi_chu="File sinh ra đã có sẵn dòng TABLE và dòng MAP kèm KEYCOLS và chế độ "
+                 "chống trùng - nên quy trình này KHÔNG có bước thêm MAP/TABLE."),
+    Step(9, "ADD_CHECKPOINTTABLE", "Tạo bảng checkpoint ở đích", L2),
+    Step(10, "REGISTER_EXTRACT", "Đăng ký tiến trình đọc redo ở nguồn", L2,
+         ghi_chu="Từ bước này trở đi, hỏng mà không dọn là để lại một tiến trình đọc "
+                 "redo MỒ CÔI giữ archive log ở DB nguồn."),
+    Step(11, "ADD_EXTRACT", "Tạo Extract ở nguồn", L2),
+    Step(12, "ADD_EXTTRAIL", "Tạo trail cho Extract", L2),
+    Step(13, "ADD_REPLICAT", "Tạo Replicat ở đích", L2),
+    Step(14, "DANG_KY_CAU_HINH", "Đăng ký luồng vào cấu hình công cụ", L2,
+         ghi_chu="Ghi THÊM khối [streams] vào conf/app.toml (có lưu bản cũ, ghi "
+                 "nguyên tử, đọc lại đối chiếu) rồi nạp nóng - không phải khởi động "
+                 "lại. Từ bước sau, công cụ điều khiển được luồng mới."),
+    Step(15, "START_EXTRACT", "Chạy Extract mới", L1),
+    Step(16, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0),
+    Step(17, "SCN_FLOOR", "Đọc ngưỡng dưới của dữ liệu nạp", L0,
+         ghi_chu="Luồng mới thì ngưỡng đúng là SCN lúc ĐĂNG KÝ capture: mọi ảnh dữ "
+                 "liệu từ mốc đó trở đi đều chắc chắn được phần bắt thay đổi phủ."),
+    Step(18, "INDEX_UNUSABLE", "Tạm vô hiệu index để nạp nhanh", L2),
+    Step(19, "SINH_SCRIPT_NAP", "Sinh script nạp", L0),
+    Step(20, "NAP", "Nạp dữ liệu ban đầu", L2, pf="LOAD"),
+    Step(21, "INDEX_REBUILD", "Dựng lại index", L2),
+    Step(22, "GATHER_STATS", "Cập nhật thống kê cho bộ tối ưu", L2),
+    Step(23, "START_REPLICAT_2", "Chạy Replicat lần đầu (SAU khi nạp)", L1, pf="START",
+         ghi_chu="Replicat chưa từng chạy nên đích đứng yên suốt đợt nạp - không cần "
+                 "dừng gì cả."),
+    Step(24, "CHO_LOW_WM", "Chờ Replicat áp hết phần chồng lấn", L0),
+    Step(25, "STOP_REPLICAT", "Dừng Replicat để sửa tham số", L1, pf="STOP"),
+    Step(26, "BO_HANDLECOLLISIONS", "Bỏ chế độ chống trùng", L2, pf="PARAM_EDIT"),
+    Step(27, "START_REPLICAT_3", "Chạy Replicat", L1, pf="START"),
+    Step(28, "VERIFY", "Đối chiếu nguồn / đích", L1),
+    Step(29, "KIEM_CHUNG", "Kiểm chứng luồng mới, ghi mốc discard", L0),
+)
+
+BO_BUOC = {"ADD_TABLE": ADD_TABLE, "RESYNC_TABLE": RESYNC_TABLE,
+           "NEW_STREAM": NEW_STREAM, "LUONG_MOI": LUONG_MOI}
+
+# Hai loai quy trinh CHAM VAO DB NGUON production: dung chung khoa doc
+# quyen toan cuc (toi da MOT phien cung luc) va dung chung duong don sach.
+KIND_LUONG_MOI = ("NEW_STREAM", "LUONG_MOI")
 
 
 # Tien to handler rieng theo loai wizard.
-TIEN_TO = {"NEW_STREAM": "ns_"}
+#
+# LUONG_MOI dung chung tien to "ns_" de tai su dung 13 handler tao ha tang.
+# He qua phai nho: bat ky buoc nao cua LUONG_MOI trung TEN voi mot handler
+# `_b_ns_*` se dinh vao handler do TRUOC. Day la ly do buoc 23/27 ten
+# START_REPLICAT_2/_3 chu khong phai START_REPLICAT - neu khong chung se
+# dinh `_b_ns_start_replicat` (goi thang gg.start_process) thay vi
+# `_b_start_replicat` (di qua control, co ghi su kien).
+TIEN_TO = {"NEW_STREAM": "ns_", "LUONG_MOI": "ns_"}
 
 
 # =====================================================================
@@ -350,13 +435,13 @@ class Wizard(IndexMixin):
                 "Chia nhỏ ra.")
         src_table = ds_bang[0]
 
-        if kind == "NEW_STREAM":
+        if kind in KIND_LUONG_MOI:
             # Luong CHUA ton tai nen khong kiem cfg.streams. Khoa doc quyen
-            # o day la TOAN CUC: toi da MOT phien NEW_STREAM cung luc, vi no
-            # cham vao DB nguon production.
+            # o day la TOAN CUC: toi da MOT phien tao luong moi cung luc (ca
+            # hai loai tinh chung), vi no cham vao DB nguon production.
             dang_mo = self.con.execute(
                 "SELECT id, src_table FROM wizard_run"
-                " WHERE kind='NEW_STREAM' AND state='OPEN'").fetchone()
+                " WHERE kind IN ('NEW_STREAM','LUONG_MOI') AND state='OPEN'").fetchone()
             if dang_mo:
                 raise WizardError(
                     f"Đang có phiên tạo luồng mới #{dang_mo['id']} mở (trên "
@@ -395,7 +480,7 @@ class Wizard(IndexMixin):
                            "bộ lại nếu dữ liệu lệch.")
             if kind == "RESYNC_TABLE" and not row["has_map"]:
                 loi.append(f"{b}: chưa có dòng MAP. Dùng quy trình thêm bảng trước.")
-            if kind == "NEW_STREAM" and row["has_map"]:
+            if kind in KIND_LUONG_MOI and row["has_map"]:
                 loi.append(f"{b}: đã có dòng MAP trong một luồng khác. Bảng đầu tiên của luồng mới "
                            "phải chưa thuộc luồng nào.")
             if kind == "ADD_TABLE" and row["stream"] and row["stream"] != stream:
@@ -547,9 +632,14 @@ class Wizard(IndexMixin):
         s = buoc_cua(run["kind"], no)
         if s.pf is None:
             return None, ""
-        if run["kind"] == "NEW_STREAM":
-            # Luong moi chua nam trong cfg.streams; pre-flight duy nhat co
-            # nghia o day la ADD_TRANDATA tren bang nguon.
+        if not run["stream"]:
+            # Luong CHUA duoc dang ky vao cfg.streams (NEW_STREAM suot ca
+            # phien; LUONG_MOI cho den buoc DANG_KY_CAU_HINH). Pre-flight duy
+            # nhat co nghia luc nay la ADD_TRANDATA tren bang nguon.
+            #
+            # Moc theo `stream` chu KHONG theo kind: ngay khi buoc 14 dat
+            # stream, cac buoc sau cua LUONG_MOI tu dong co pre-flight that
+            # (STOP/START/PARAM_EDIT/LOAD) ma khong can them nhanh nao.
             return (s.pf if s.pf == "ADD_TRANDATA" else None), run["src_table"]
         st = self.cfg.streams[run["stream"]]
         if s.pf in ("STOP", "START"):
@@ -772,6 +862,7 @@ class Wizard(IndexMixin):
         return f"start replicat {rep}"
 
     _xt_start_replicat_2 = _xt_start_replicat
+    _xt_start_replicat_3 = _xt_start_replicat
 
     async def _xt_stop_extract(self, run: dict) -> str:
         et, _, _ = self._proc(run)
@@ -1134,6 +1225,12 @@ class Wizard(IndexMixin):
         return {"msg": f"{rep} đã chạy", "output": r["lines"]}
 
     _b_start_replicat_2 = _b_start_replicat
+    # LUONG_MOI chay Replicat ba lan trong mot luot (lan dau sau khi nap,
+    # roi dung de bo chong trung, roi chay lai) nen can them mot ten nua.
+    # Ten buoc KHONG duoc la START_REPLICAT: tien to "ns_" se lam no dinh
+    # vao `_b_ns_start_replicat` (goi thang gg.start_process) thay vi handler
+    # nay (di qua control, co ghi su kien).
+    _b_start_replicat_3 = _b_start_replicat
 
     async def _b_stop_extract(self, run: dict, ts: dict) -> dict:
         et, _, _ = self._proc(run)
@@ -1970,10 +2067,21 @@ EXIT
 
     # ---------------------------------------------------------- buoc 2
     async def _b_ns_kiem_ten(self, run: dict, ts: dict) -> dict:
-        et = gg.kiem_ten_moi(ts.get("extract", ""), "extract")
-        rep = gg.kiem_ten_moi(ts.get("replicat", ""), "replicat")
-        pre = gg.kiem_ten_moi(ts.get("trail_prefix", ""), "trail")
-        ck = (ts.get("ckpt_table") or f"OGG_BSH.{rep}").strip().upper()
+        # Doc tu `ts` (nguoi go o man hinh buoc nay) HOAC tu dong run (che do
+        # chay tu dong da dat truoc qua `TuDong.dat_ten_moi`). Giong het cach
+        # `_b_xac_nhan_keycols` doc `ts.get("keycols") or run["keycols"]`.
+        #
+        # Dat truoc KHONG phai duong vong qua kiem chung: moi kiem tra duoi
+        # day van chay day du, va chay TAI THOI DIEM NAY chu khong phai luc
+        # nguoi bam nut - trang thai he thong co the da doi.
+        et = gg.kiem_ten_moi(
+            ts.get("extract") or run["created_extract"] or "", "extract")
+        rep = gg.kiem_ten_moi(
+            ts.get("replicat") or run["created_replicat"] or "", "replicat")
+        pre = gg.kiem_ten_moi(
+            ts.get("trail_prefix") or run["created_trail_prefix"] or "", "trail")
+        ck = (ts.get("ckpt_table") or run["created_ckpt_table"]
+              or f"OGG_BSH.{rep}").strip().upper()
         if "." not in ck:
             ck = f"OGG_BSH.{ck}"
         gg.kiem_ten_moi(ck.split(".")[-1], "checkpointtable")
@@ -2219,12 +2327,139 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
                 f'replicat = "{rep}"\n'
                 f'trail = "{pre}"\n')
         self._luu_script(f"wz{run['id']}_app_toml.txt", toml)
-        out += ["", "Thêm khối dưới đây vào conf/app.toml TRÊN SERVER rồi chạy `run.sh "
-                    "restart` để công cụ bắt đầu theo dõi luồng mới.",
-                "Công cụ KHÔNG tự sửa app.toml: cấu hình trên server là nguồn sự thật, "
-                "và deploy.sh có ý không đẩy file đó lên.", "", toml]
-        return {"msg": f"Luồng mới {et}/{rep} đã chạy. Còn 1 việc làm tay: thêm khối [streams] "
-                       "vào conf/app.toml", "output": out}
+        if run["kind"] != "LUONG_MOI":
+            out += ["", "Thêm khối dưới đây vào conf/app.toml TRÊN SERVER rồi chạy `run.sh "
+                        "restart` để công cụ bắt đầu theo dõi luồng mới.",
+                    "Công cụ KHÔNG tự sửa app.toml: cấu hình trên server là nguồn sự thật, "
+                    "và deploy.sh có ý không đẩy file đó lên.", "", toml]
+            return {"msg": f"Luồng mới {et}/{rep} đã chạy. Còn 1 việc làm tay: thêm khối "
+                           "[streams] vào conf/app.toml", "output": out}
+
+        # LUONG_MOI: khoi [streams] da duoc ghi o buoc DANG_KY_CAU_HINH. Con
+        # MOC RONG cua file discard - thieu no thi `cfg.discard_baseline` tra
+        # 0 cho Replicat moi va sinh canh bao discard GIA, vinh vien.
+        from . import toml_ghi
+        if dsc.exists():
+            n_dsc = dsc.stat().st_size
+            try:
+                r = toml_ghi.them_discard_baseline(self.cfg.app_toml, rep, n_dsc)
+                self.cfg.discard_baseline[rep] = n_dsc
+                out.append("đã ghi mốc rỗng %s = %d vào [discard_baseline]%s"
+                           % (rep, n_dsc, " (đã có sẵn)" if r.get("da_co") else ""))
+            except Exception as e:                            # noqa: BLE001
+                out.append(f"KHÔNG ghi được mốc discard cho {rep}: {e}")
+                out.append("Thêm tay dòng `%s = %d` vào khối [discard_baseline] của "
+                           "conf/app.toml, nếu không sẽ có cảnh báo discard GIẢ."
+                           % (rep, n_dsc))
+        out += ["",
+                f"Cấu hình: đã đăng ký luồng {run['stream']} vào conf/app.toml ở bước "
+                "ĐĂNG KÝ CẤU HÌNH (có lưu bản cũ) và nạp nóng - không cần khởi động lại.",
+                "CÒN MỘT VIỆC LÀM TAY: deploy.sh cố ý không đẩy conf/app.toml, nên bản "
+                "trong repo vẫn chưa có luồng này. Chép khối dưới đây vào bản repo, nếu "
+                "không một lần deploy có đẩy cấu hình sẽ làm mất luồng.",
+                "", toml]
+        return {"msg": f"Luồng mới {et}/{rep} đã chạy và đã đăng ký vào cấu hình.",
+                "output": out}
+
+    # ---------------------------------------- buoc rieng cua LUONG_MOI
+    async def _xt_ns_dang_ky_cau_hinh(self, run: dict) -> str:
+        """Ban xem truoc = DUNG KHOI se duoc ghi vao conf/app.toml.
+
+        Khong phai mot ban mo ta gan dung: nguoi doc cai gi thi file nhan
+        dung cai do.
+        """
+        from . import toml_ghi
+
+        et, rep, pre, _ = self._ns_ten(run)
+        sid, ten = self._ns_ma_luong(run)
+        dong = [f"# Ghi THEM vao {self.cfg.app_toml} - luu ban cu truoc, ghi",
+                "# nguyen tu, roi DOC LAI doi chieu: "
+                f"{len(self.cfg.streams)} luong dang chay phai y nguyen."]
+        return chr(10).join(dong) + toml_ghi.khoi_streams(sid, et, rep, pre, ten)
+
+    def _ns_ma_luong(self, run: dict) -> tuple[str, str]:
+        """Ma luong trong app.toml + mo ta. Mac dinh ma = tien to trail."""
+        ctx = json.loads(run["ctx_json"] or "{}")
+        lm = ctx.get("luong_moi") or {}
+        _, _, pre, _ = self._ns_ten(run)
+        sid = (lm.get("sid") or pre).strip().upper()
+        ten = (lm.get("ten")
+               or f"Luồng tạo bởi quy trình #{run['id']} ({run['src_table']})")
+        return sid, ten
+
+    async def _b_ns_dang_ky_cau_hinh(self, run: dict, ts: dict) -> dict:
+        """Ghi luong moi vao conf/app.toml va nap nong.
+
+        VI SAO BUOC NAY O DAY, khong som hon va khong muon hon:
+          - som hon: dang ky mot luong ma Replicat chua ton tai -> bo thu
+            thap bao dong gia.
+          - muon hon: buoc ke tiep (START_EXTRACT) va toan bo nua sau doc
+            `cfg.streams[run["stream"]]` va `gg.PROCESSES`. Khong dang ky
+            truoc thi chung bao "Process ngoai enum".
+
+        Chay lai duoc: khoi da co va trung y het thi khong ghi lan hai.
+        """
+        from . import toml_ghi
+
+        et, rep, pre, _ = self._ns_ten(run)
+        sid, ten = self._ns_ma_luong(run)
+        r = toml_ghi.dang_ky_luong(self.cfg, sid, et, rep, pre, ten)
+        self._ghi_run(run["id"], stream=sid)
+
+        # Danh sach quan ly: bang nay tu gio thuoc luong moi. `in_extract` va
+        # `has_map` dat 1 vi file tham so sinh o buoc TAO_PARAM DA co san ca
+        # hai dong - khong phai mot lan doan.
+        self.con.execute(
+            "UPDATE managed_table SET stream=?, in_extract=1, has_map=1,"
+            " handlecollisions=1, updated_at=? WHERE src_table=?",
+            (sid, int(time.time()), run["src_table"]))
+
+        # Kiem chung ngay: `_proc` phai tra ve bo ba, khong KeyError.
+        p_et, p_rep, p_tr = self._proc({"stream": sid})
+        if (p_et, p_rep, p_tr) != (et, rep, pre):
+            raise WizardError(
+                f"nạp nóng cấu hình không khớp: đọc lại được {p_et}/{p_rep}/{p_tr}")
+
+        out = [f"mã luồng        = {sid}",
+               f"extract         = {et}",
+               f"replicat        = {rep}",
+               f"tiền tố trail   = {pre}",
+               f"file cấu hình   = {self.cfg.app_toml}"]
+        if r.get("da_co"):
+            out.append("khối [streams] đã có sẵn và trùng khớp - không ghi lại")
+        else:
+            out.append(f"bản lưu trước khi ghi = {r.get('backup')}")
+        out += ["",
+                "Đã đọc lại file sau khi ghi và đối chiếu: các luồng đang chạy "
+                + ", ".join(sorted(k for k in self.cfg.streams if k != sid))
+                + " y nguyên từng giá trị.",
+                "Công cụ điều khiển được luồng mới NGAY, không cần khởi động lại."]
+        return {"msg": f"Đã đăng ký luồng {sid} vào cấu hình và nạp nóng", "output": out}
+
+    async def _b_ns_scn_floor(self, run: dict, ts: dict) -> dict:
+        """Nguong duoi cua du lieu nap, cho LUONG MOI.
+
+        KHONG dung `_b_scn_floor` chung: no doc moc High Watermark cua
+        Replicat qua `info replicat detail`, ma mot Replicat CHUA TUNG CHAY
+        thi khong in moc do -> buoc se FAIL moi lan.
+
+        Nguong dung o day la SCN luc DANG KY capture (`register_scn`, do
+        buoc REGISTER_EXTRACT ghi lai): moi anh du lieu tu moc do tro di deu
+        chac chan duoc phan bat thay doi phu. Script nap chi dung nguong nay
+        lam chan duoi (`IF v_scn < v_floor THEN RAISE`), nen lay dung bang
+        SCN dang ky la an toan va khong qua chat.
+        """
+        scn = run["register_scn"]
+        if not scn:
+            raise WizardError(
+                "Chưa có SCN đăng ký capture -> DỪNG. Ngưỡng dưới sai thì script nạp "
+                "chặn sai hoặc bỏ lọt dữ liệu. Chạy lại bước đăng ký Extract.")
+        self._ghi_run(run["id"], scn_floor=int(scn))
+        return {"msg": f"Ngưỡng dưới = {int(scn):,} (SCN lúc đăng ký capture)",
+                "output": [
+                    f"register_scn = {int(scn)}",
+                    "Mọi ảnh dữ liệu nạp ở SCN này trở đi đều được phần bắt thay đổi phủ.",
+                ]}
 
     # =================================================================
     # ROLLBACK - phan nguy hiem nhat cua wizard nay
@@ -2244,12 +2479,30 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
            -> inbound server `OGG$<R>` mo coi, VAN GIU streams pool.
         """
         run = self.lay(rid)
-        if run["kind"] != "NEW_STREAM":
-            raise WizardError("rollback nay chi danh cho NEW_STREAM")
+        if run["kind"] not in KIND_LUONG_MOI:
+            raise WizardError("rollback nay chi danh cho quy trinh tao luong moi")
         et, rep, pre, ck = self._ns_ten(run)
         cp = self._ns_cho_phep(run)
         buoc: list[dict] = []
         out: list[str] = []
+
+        # GO CAU HINH TRUOC khi cham vao GoldenGate (chi LUONG_MOI moi co
+        # cau hinh de go). Thu tu nay co ly do: de lai mot luong trong
+        # app.toml ma process da bi xoa thi bo thu thap se bao dong gia va
+        # `_proc()` cua cac duong khac van tro vao do. Go khong duoc thi
+        # DUNG LAI, chua xoa gi ca - con sua duoc.
+        if run["kind"] == "LUONG_MOI" and run["stream"]:
+            from . import toml_ghi
+            try:
+                r_cfg = toml_ghi.bo_dang_ky_luong(self.cfg, run["stream"])
+                buoc.append({"lenh": f"go [streams.{run['stream']}] khoi app.toml",
+                             "ok": True,
+                             "chi_tiet": "ban luu %s" % (r_cfg.get("backup") or "-")})
+                out.append(f"da go khoi [streams.{run['stream']}] khoi {self.cfg.app_toml}")
+            except Exception as e:                              # noqa: BLE001
+                raise WizardError(
+                    f"Không gỡ được [streams.{run['stream']}] khỏi conf/app.toml ({e}). "
+                    "DỪNG LẠI, chưa xoá gì ở GoldenGate - sửa cấu hình rồi dọn lại.") from e
 
         # Dung process truoc khi xoa
         for t in (rep, et):
@@ -2295,6 +2548,18 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
             f.unlink()
             out.append(f"da xoa {f}")
 
+        # Tien trinh da bi xoa -> app khong con duoc dieu khien chung nua.
+        gg.PROCESSES.difference_update({et, rep})
+        if run["kind"] == "LUONG_MOI":
+            # Bang tro lai "chua thuoc luong nao" de con mo lai duoc phien
+            # khac. KHONG dung toi du lieu da nap va KHONG tat TRANDATA -
+            # hai viec do xoa tu dong la doan mo, de nguoi quyet.
+            self.con.execute(
+                "UPDATE managed_table SET stream=NULL, in_extract=0, has_map=0,"
+                " handlecollisions=0, updated_at=? WHERE src_table=?",
+                (int(time.time()), run["src_table"]))
+            out.append(f"danh sach quan ly: {run['src_table']} tro lai chua thuoc luong nao")
+
         self._ghi_run(rid, state="ABORTED", finished_at=int(time.time()),
                       note=f"rollback boi {who}: {reason}")
 
@@ -2310,5 +2575,8 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
                 "Rollback chay nhung " + ", ".join(that_bai) + " THẤT BẠI. Đọc kết quả chi tiết - có thể còn tiến trình đọc redo mồ côi "
                                                                "ở DB nguồn.")
 
+        out += ["",
+                "KHÔNG đụng tới (cố ý, để người quyết): bảng đích đã tạo và dữ liệu đã "
+                "nạp trong đó, và TRANDATA đã bật ở bảng nguồn."]
         return {"msg": f"Đã dọn sạch phiên #{rid}: {et}, {rep}, trail {pre}, {ck}",
                 "buoc": buoc, "output": out}

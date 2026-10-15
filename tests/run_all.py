@@ -34,7 +34,7 @@ for _luong in (sys.stdout, sys.stderr):
 
 MODULES = ["test_gg_parse", "test_safety", "test_params", "test_jobs",
            "test_lo_nhieu_bang", "test_auto", "test_cho_khoiphuc",
-           "test_notify", "test_ddl"]
+           "test_notify", "test_ddl", "test_toml_ghi", "test_luong_moi"]
 
 
 def main() -> int:

@@ -69,12 +69,24 @@ trong quy trình đều có ghi chú riêng ngay tại chỗ &mdash; không cầ
 
 <article>
   <header><strong>Cách nhanh: chỉ gõ tên bảng</strong></header>
-  <p>Vào <a href="/nhanh"><strong>Thao tác nhanh</strong></a>. Hai việc hay
+  <p>Vào <a href="/nhanh"><strong>Thao tác nhanh</strong></a>. Ba việc hay
     làm nhất có ở đó, chỉ cần gõ tên bảng:</p>
   <ul>
     <li><strong>Thêm bảng vào luồng</strong> &mdash; cho bảng chưa đồng bộ.</li>
     <li><strong>Đồng bộ lại bảng</strong> &mdash; cho bảng đã đồng bộ mà dữ
       liệu lệch.</li>
+    <li><strong>Tạo luồng MỚI và đưa bảng đầu tiên vào</strong> (29 bước)
+      &mdash; cho bảng chưa thuộc luồng nào mà muốn có Extract/Replicat
+      riêng. <span class="bad">Nguy hiểm nhất</span>: bước 10 đăng ký một
+      tiến trình đọc redo vào <strong>DB nguồn production</strong>, và bước
+      14 ghi thêm khối <code>[streams]</code> vào
+      <code>conf/app.toml</code> (lưu bản cũ, đọc lại đối chiếu, không phải
+      khởi động lại). Hỏng ở bất kỳ bước nào thì công cụ <strong>tự dọn
+      sạch</strong> &mdash; kể cả bỏ đăng ký ở DB nguồn &mdash; nhưng
+      <strong>không</strong> xoá bảng đích đã tạo, dữ liệu đã nạp và TRANDATA.
+      Tên Extract/Replicat/trail được <strong>gợi ý sẵn</strong> theo quy ước,
+      sửa được; xác nhận L2 ở đây bắt nhập lại <strong>tên Extract</strong>
+      chứ không phải tên bảng.</li>
   </ul>
   <p>Công cụ tự đi hết quy trình. <strong>Mỗi bước vẫn phải đạt mới sang bước
     sau</strong>; bước nào không đạt thì dừng ngay tại đó và nói rõ vì sao.</p>

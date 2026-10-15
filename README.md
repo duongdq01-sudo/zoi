@@ -227,7 +227,8 @@ Một đoạn code bị `str.replace()` chèn vào **cả hai** chỗ khớp, tr
 |---|---|---|---|
 | `ADD_TABLE` | 23 | 5 | bảng **chưa có `MAP`**, thêm vào luồng đang chạy |
 | `RESYNC_TABLE` | 15 | 4 | bảng **đã có `MAP`** nhưng dữ liệu lệch |
-| `NEW_STREAM` | 13 | 5 | tạo Extract + Replicat **mới** |
+| `NEW_STREAM` | 13 | 5 | tạo Extract + Replicat **mới** (đường bấm tay từng bước) |
+| `LUONG_MOI` | 29 | 9 | tạo luồng mới **trọn bộ**: hạ tầng + bảng đích + nạp dữ liệu + tự đăng ký vào `conf/app.toml` |
 
 ### State ở server, không ở client
 
@@ -268,6 +269,26 @@ Thứ tự kiểm **không được đảo**: lớp 3 trước lớp 2. Nếu đ
 Thứ tự lệnh cũng là hằng số, hai chỗ dễ đảo nhất và cả hai đã từng sai: `REGISTER EXTRACT` **trước** `ADD EXTRACT`; `ADD CHECKPOINTTABLE` **trước** `ADD REPLICAT` (`GLOBALS` rỗng nên không có `CHECKPOINTTABLE` mặc định mà cú pháp lại bắt buộc chọn).
 
 **Hai việc công cụ không làm, có chủ ý:** không tự chạy `ALTER SYSTEM SET streams_pool_size` (chỉ kiểm tra hai đầu, báo đỏ, sinh lệnh cho DBA chạy tay), và **không tự đặt tên** — DBA gõ, công cụ kiểm trùng.
+
+### `LUONG_MOI` — tạo luồng mới trọn bộ, tự đăng ký (2026-10-15)
+
+Ô thứ ba của **Thao tác nhanh**. 29 bước, ghép hạ tầng của `NEW_STREAM` với phần đưa dữ liệu vào của `ADD_TABLE`, cộng một bước mới: **`DANG_KY_CAU_HINH`** (bước 14).
+
+**Ba điều của thứ tự này không được đảo**, và mỗi điều có một cách hỏng riêng:
+
+1. `XAC_NHAN_KEYCOLS` (3) trước `TAO_PARAM` (8) — cột khoá **nhúng thẳng** vào dòng MAP sinh ra ở bước 8, và không bước nào sửa lại dòng đó.
+2. `KIEM_BANG_DICH` (6) trước `REGISTER_EXTRACT` (10) — bẫy thiếu quyền phải nổ **trước** khi đăng ký capture vào DB nguồn.
+3. `DANG_KY_CAU_HINH` (14) trước `START_EXTRACT` (15) — từ đó trở đi các handler dùng chung đọc `cfg.streams[...]` và `gg.PROCESSES`.
+
+**Cố ý KHÔNG có** `THEM_MAP`/`THEM_TABLE`/`STOP_EXTRACT`: file tham số sinh ở bước 8 **đã có sẵn** cả hai dòng, chạy lại là nhân đôi dòng MAP. Cửa sổ bảo trì cũng không tồn tại — Replicat mới toanh, đã dừng sẵn suốt đợt nạp.
+
+**`SCN_FLOOR` là handler riêng**: `_b_scn_floor` dùng chung đọc High Watermark của Replicat, mà Replicat chưa từng chạy thì không in mốc đó. Ngưỡng đúng ở đây là **`register_scn`** — SCN lúc đăng ký capture.
+
+**Ghi `conf/app.toml` (`app/toml_ghi.py`)** — chỉ THÊM văn bản, không serialise lại: lưu bản cũ có đóng dấu thời gian → ghi nguyên tử (`tmp` cùng thư mục + `fsync` + `os.replace`) → **đọc lại và đối chiếu từng giá trị** của các luồng cũ; lệch một chữ thì trả file về bản cũ và dừng. Chạy lại được (khối trùng y hệt thì không ghi lần hai). Mốc discard cũng được ghi, và phải chèn **ngay sau** dòng `[discard_baseline]` — append cuối file thì khoá rơi vào bảng cuối cùng (`[notify.zalo_bot]`) và sinh cảnh báo discard giả vĩnh viễn.
+
+**Hai danh sách tên, hai mục đích** (`app/adapters/gg.py`): `PROCESSES` là app được phép **điều khiển**; `BAT_KHA_XAM_PHAM` là app **không được tạo/xoá/đăng ký**. Tên của một phiên đang mở nằm ở danh sách đầu và **không** ở danh sách sau — nếu không thì chính chức năng dọn sạch của phiên bị lớp 3 chặn.
+
+**Hỏng đâu dọn đó** (yêu cầu người dùng): bộ lái tự chạy `rollback_new_stream` ngay khi một bước không đạt, ở **bất kỳ** bước nào sau khi đã chốt tên. Hiện trường trong DB của công cụ được giữ nguyên trước khi dọn, có một dòng audit `AUTO_ROLLBACK`, và **không bao giờ tự dọn lần hai**. Đánh đổi đã biết: lệnh dọn chạy `UNREGISTER EXTRACT … DATABASE` lên chính DB nguồn, và hỏng ở nửa sau thì mất cả công nạp.
 
 ### Rollback của `NEW_STREAM`
 

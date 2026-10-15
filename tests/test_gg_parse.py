@@ -553,3 +553,139 @@ def blocklist_van_chan_nhom_pham_vi_o_duong_thuong():
         except gg.Blocked:
             continue
         raise AssertionError(f"duong thuong phai chan: {script!r}")
+
+
+# =====================================================================
+# LUONG_MOI (2026-10-15) - hai danh sach khac nhau, va goi y ten.
+#
+# Moi ca o duoi ma doi bien toan cuc deu phai tra lai trong `finally`:
+# PROCESSES / BAT_KHA_XAM_PHAM bay gio la `set`, khong con `frozenset`.
+# =====================================================================
+
+@test
+def dang_ky_process_KHONG_lam_ten_moi_thanh_bat_kha_xam_pham():
+    """Neu dua luon vao danh sach bat kha xam pham thi chinh phien tao ra
+    no se khong don sach duoc - capture mo coi o lai DB nguon."""
+    try:
+        gg.dang_ky_process("ETTEST", "RTEST")
+        assert "ETTEST" in gg.PROCESSES and "RTEST" in gg.PROCESSES
+        assert "ETTEST" not in gg.BAT_KHA_XAM_PHAM
+        assert "RTEST" not in gg.BAT_KHA_XAM_PHAM
+        # va van xoa duoc trong pham vi phien
+        gg.kiem_pham_vi("delete extract ETTEST", {"ETTEST"})
+    finally:
+        gg.PROCESSES.difference_update({"ETTEST", "RTEST"})
+
+
+@test
+def khoa_dang_chay_lam_ten_do_thanh_bat_kha_xam_pham():
+    try:
+        gg.khoa_dang_chay({"ETTEST"})
+        try:
+            gg.kiem_pham_vi("delete extract ETTEST", {"ETTEST"})
+        except gg.Blocked as e:
+            assert "bất khả xâm phạm" in str(e), str(e)
+        else:
+            raise AssertionError("da khoa ma van xoa duoc")
+    finally:
+        gg.BAT_KHA_XAM_PHAM.discard("ETTEST")
+
+
+@test
+def luong_moi_van_khong_cham_duoc_doi_tuong_dang_chay():
+    """Lop 3 truoc lop 2: phien LUONG_MOI khai gi cung khong qua duoc."""
+    cp = {"ETBC2", "RBC2", "bc", "OGG_BSH.RBC2"}
+    for script in ("delete replicat RHT",
+                   "unregister extract ETPMNV database",
+                   "add exttrail /u01/app/ogg/dirdat/ht, extract ETBC2",
+                   "delete checkpointtable OGG_BSH.RDTHU",
+                   "delete extract ETDTHU"):
+        try:
+            gg.kiem_pham_vi(script, cp)
+        except gg.Blocked as e:
+            assert "bất khả xâm phạm" in str(e), f"{script}: {e}"
+            continue
+        raise AssertionError(f"phai tu choi: {script!r}")
+
+
+@test
+def ten_extract_phai_bat_dau_bang_ET():
+    """start/stop va dblogin suy vai tro tu 2 ky tu dau cua ten."""
+    assert gg.kiem_ten_moi("etbc2", "extract") == "ETBC2"
+    try:
+        gg.kiem_ten_moi("BC2", "extract")
+    except gg.Blocked as e:
+        assert "bắt đầu bằng ET" in str(e), str(e)
+        return
+    raise AssertionError("Extract khong bat dau bang ET ma van qua")
+
+
+@test
+def ten_replicat_KHONG_duoc_bat_dau_bang_ET():
+    assert gg.kiem_ten_moi("rbc2", "replicat") == "RBC2"
+    try:
+        gg.kiem_ten_moi("ETX", "replicat")
+    except gg.Blocked as e:
+        assert "DB NGUỒN" in str(e), str(e)
+        return
+    raise AssertionError("Replicat ten ETX ma van qua")
+
+
+# ------------------------------------------------------------- goi y ten
+DANG_DUNG = {"ETPMNV", "RPMNVODS", "PM", "ETHT", "RHT", "HT",
+             "ETDTHU", "RDTHU", "DT"}
+
+
+@test
+def goi_y_khong_bao_gio_tra_ten_dang_chay():
+    g = gg.goi_y_ten("HT", DANG_DUNG)
+    assert g["extract"] not in ("ETHT",) and g["replicat"] not in ("RHT",)
+    assert g["trail_prefix"] not in ("ht", "pm", "dt")
+
+
+@test
+def moi_ten_goi_y_deu_qua_duoc_kiem_ten_moi():
+    for ma in ("BC2", "HT", "PM", "KT", "XYZ"):
+        g = gg.goi_y_ten(ma, DANG_DUNG)
+        assert gg.kiem_ten_moi(g["extract"], "extract") == g["extract"], ma
+        assert gg.kiem_ten_moi(g["replicat"], "replicat") == g["replicat"], ma
+        assert gg.kiem_ten_moi(g["trail_prefix"], "trail") == g["trail_prefix"], ma
+
+
+@test
+def tien_to_trail_goi_y_luon_la_DUNG_2_chu_thuong():
+    for ma in ("BC2", "HT", "P", "KT_SO_SO", "X1"):
+        g = gg.goi_y_ten(ma, DANG_DUNG)
+        if g["trail_prefix"]:
+            assert gg.TRAIL_PREFIX.match(g["trail_prefix"]), (ma, g)
+
+
+@test
+def goi_y_replicat_khong_bao_gio_bat_dau_bang_ET():
+    for ma in ("ET", "ETX", "ETHT"):
+        g = gg.goi_y_ten(ma, DANG_DUNG)
+        assert not g["replicat"].startswith("ET"), (ma, g)
+
+
+@test
+def goi_y_suy_duoc_ma_tu_ten_bang():
+    g = gg.goi_y_ten("", DANG_DUNG, bang="HT_MA_KENH_BAN")
+    assert g["stream_id"] == "HT"
+    assert g["extract"] and g["extract"] != "ETHT"
+
+
+@test
+def goi_y_la_TAT_DINH():
+    a = gg.goi_y_ten("BC2", DANG_DUNG)
+    b = gg.goi_y_ten("BC2", DANG_DUNG)
+    assert a == b
+
+
+@test
+def goi_y_het_cho_thi_bao_chu_khong_tra_ten_trung():
+    """Khoa het khong gian ten hep lai -> phai bao, khong duoc tra bua."""
+    kin = set(DANG_DUNG) | {f"ET{'BC'}"} | {f"ETB{i}" for i in range(2, 10)}
+    kin |= {f"R{'BC'}"} | {f"RB{i}" for i in range(2, 10)}
+    g = gg.goi_y_ten("BC", kin)
+    for ten in (g["extract"], g["replicat"]):
+        assert ten.upper() not in {x.upper() for x in kin}, g

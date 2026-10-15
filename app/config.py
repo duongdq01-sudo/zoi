@@ -50,6 +50,10 @@ class Config:
     creds: dict[str, DbCred]
     retain_raw_days: int
     notify: dict          # khoi [notify] trong app.toml
+    # Duong dan file cau hinh goc. Buoc DANG_KY_CAU_HINH cua quy trinh
+    # LUONG_MOI ghi THEM khoi [streams.<ma>] vao dung file nay (co luu ban
+    # cu, ghi nguyen tu, doc lai doi chieu) - xem app/toml_ghi.py.
+    app_toml: Path
 
     @property
     def db_path(self) -> Path:
@@ -119,6 +123,7 @@ def load(app_toml: Path | None = None, secrets_ini: Path | None = None) -> Confi
     gg_home = Path(paths["gg_home"])
 
     return Config(
+        app_toml=app_toml,
         gg_home=gg_home,
         oracle_home=Path(oracle["oracle_home"]),
         oracle_sid=oracle["oracle_sid"],

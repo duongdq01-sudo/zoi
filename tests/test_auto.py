@@ -7,6 +7,7 @@ truong hop phai tu choi, va khoa lai rang bo lai KHONG bo mot lop kiem nao.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import sqlite3
 import sys
@@ -294,3 +295,213 @@ def o_go_tay_L2_KHONG_con_chan_dan():
     assert "onpaste" not in tpl and "ondrop" not in tpl
     # nhung ten VAN phai khop - chot that nam o may chu
     assert 'name="typed"' in tpl
+
+
+# ================================= LUONG_MOI qua che do nhanh (2026-10-15)
+def _con_lm(**kw):
+    """DB co CA managed_table CA wizard_run - nhanh LUONG_MOI doc ca hai."""
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute(
+        "CREATE TABLE managed_table (src_owner TEXT, src_table TEXT,"
+        " tgt_owner TEXT, tgt_table TEXT, stream TEXT, prepared INT,"
+        " in_extract INT, has_map INT, handlecollisions INT, updated_at INT)")
+    c.execute("CREATE TABLE wizard_run (id INTEGER PRIMARY KEY, kind TEXT,"
+              " state TEXT, stream TEXT, src_table TEXT, cur_step INT,"
+              " keycols TEXT, note TEXT, ctx_json TEXT, updated_at INT,"
+              " created_extract TEXT, created_replicat TEXT,"
+              " created_trail_prefix TEXT, created_ckpt_table TEXT)")
+    d = dict(src_owner="KT_BSH", src_table="HT_MA_KENH_BAN", tgt_owner="ODS",
+             tgt_table="HT_MA_KENH_BAN", stream=None, prepared=0,
+             in_extract=0, has_map=0)
+    d.update(kw)
+    c.execute("INSERT INTO managed_table(src_owner,src_table,tgt_owner,"
+              "tgt_table,stream,prepared,in_extract,has_map) VALUES"
+              " (?,?,?,?,?,?,?,?)",
+              (d["src_owner"], d["src_table"], d["tgt_owner"], d["tgt_table"],
+               d["stream"], d["prepared"], d["in_extract"], d["has_map"]))
+    return c
+
+
+@test
+def luong_moi_cho_qua_khi_bang_chua_thuoc_luong_nao():
+    r = auto.kiem_dieu_kien(_con_lm(), "LUONG_MOI", "HT_MA_KENH_BAN")
+    assert r["src_table"] == "HT_MA_KENH_BAN"
+
+
+@test
+def luong_moi_tu_choi_khi_bang_DA_co_MAP():
+    m = _loi(lambda: auto.kiem_dieu_kien(
+        _con_lm(has_map=1), "LUONG_MOI", "HT_MA_KENH_BAN"))
+    assert "đã có dòng MAP" in m, m
+
+
+@test
+def luong_moi_tu_choi_khi_bang_da_co_dong_TABLE():
+    m = _loi(lambda: auto.kiem_dieu_kien(
+        _con_lm(in_extract=1), "LUONG_MOI", "HT_MA_KENH_BAN"))
+    assert "dòng TABLE" in m, m
+
+
+@test
+def luong_moi_tu_choi_khi_bang_da_gan_luong():
+    m = _loi(lambda: auto.kiem_dieu_kien(
+        _con_lm(stream="HT"), "LUONG_MOI", "HT_MA_KENH_BAN"))
+    assert "thuộc luồng HT" in m, m
+
+
+@test
+def luong_moi_tu_choi_khi_dang_co_phien_tao_luong_khac():
+    c = _con_lm()
+    c.execute("INSERT INTO wizard_run(id,kind,state,src_table) VALUES"
+              " (3,'NEW_STREAM','OPEN','CN_CH')")
+    m = _loi(lambda: auto.kiem_dieu_kien(c, "LUONG_MOI", "HT_MA_KENH_BAN"))
+    assert "Tối đa MỘT phiên" in m, m
+
+
+@test
+def luong_moi_van_tu_choi_khi_nguon_dich_KHAC_TEN():
+    m = _loi(lambda: auto.kiem_dieu_kien(
+        _con_lm(tgt_table="HT_MA_KENH_BAN_ODS"), "LUONG_MOI", "HT_MA_KENH_BAN"))
+    assert "KHÁC TÊN" in m, m
+
+
+@test
+def NEW_STREAM_van_KHONG_phai_che_do_nhanh():
+    """Ban thu cong 13 buoc co y nam ngoai; ban tron bo la LUONG_MOI."""
+    m = _loi(lambda: auto.kiem_dieu_kien(_con_lm(), "NEW_STREAM", "HT_MA_KENH_BAN"))
+    assert "chỉ hỗ trợ" in m, m
+
+
+# --------------------------------------------------------- dat_ten_moi
+def _tudong_lm(con):
+    return auto.TuDong(cfg=None, con=con, wizard=None, pre=None, auth=None,
+                       pf_cua=None)
+
+
+@test
+def dat_ten_moi_luu_du_bon_ten_va_ma_luong():
+    c = _con_lm()
+    c.execute("INSERT INTO wizard_run(id,kind,state,src_table,cur_step)"
+              " VALUES (9,'LUONG_MOI','OPEN','HT_MA_KENH_BAN',4)")
+    _tudong_lm(c).dat_ten_moi(9, {"extract": "etbc2", "replicat": "rbc2",
+                               "trail_prefix": "bc", "stream_id": "bc2"})
+    r = c.execute("SELECT * FROM wizard_run WHERE id=9").fetchone()
+    assert r["created_extract"] == "ETBC2"
+    assert r["created_replicat"] == "RBC2"
+    assert r["created_trail_prefix"] == "bc"
+    assert r["created_ckpt_table"] == "OGG_BSH.RBC2"
+    assert '"sid": "BC2"' in r["ctx_json"]
+
+
+@test
+def dat_ten_moi_TU_CHOI_ten_xau_ngay_tu_dau():
+    from app.adapters import gg
+
+    c = _con_lm()
+    c.execute("INSERT INTO wizard_run(id,kind,state,src_table,cur_step)"
+              " VALUES (9,'LUONG_MOI','OPEN','HT_MA_KENH_BAN',4)")
+    t = _tudong_lm(c)
+    xau = [{"extract": "RHT", "replicat": "RBC2", "trail_prefix": "bc"},
+           {"extract": "ETBC2", "replicat": "ETX", "trail_prefix": "bc"},
+           {"extract": "ETBC2", "replicat": "RBC2", "trail_prefix": "b"},
+           {"extract": "ETBC2", "replicat": "RBC2", "trail_prefix": "pm"}]
+    for ten in xau:
+        try:
+            t.dat_ten_moi(9, ten)
+        except (gg.Blocked, auto.AutoError):
+            continue
+        raise AssertionError("ten xau ma van dat duoc: %s" % ten)
+
+
+# ------------------------------------------------------- tu don khi hong
+class _WizardDon:
+    """Wizard gia: nho lai co bi goi don sach khong."""
+
+    def __init__(self, con, hong=False):
+        self.con = con
+        self.hong = hong
+        self.da_don = []
+
+    def lay(self, rid):
+        return dict(self.con.execute(
+            "SELECT * FROM wizard_run WHERE id=?", (rid,)).fetchone())
+
+    async def rollback_new_stream(self, rid, who, reason):
+        self.da_don.append((rid, who, reason))
+        if self.hong:
+            raise RuntimeError("unregister extract THAT BAI")
+        return {"msg": "da don sach"}
+
+
+class _AuthGia:
+    def __init__(self):
+        self.dong = []
+
+    def audit(self, *a, **kw):
+        self.dong.append((a, kw))
+
+
+def _phien(c, **kw):
+    d = dict(id=9, kind="LUONG_MOI", state="OPEN", src_table="HT_MA_KENH_BAN",
+             cur_step=11, note="[thao tác nhanh dừng] bước 11 lỗi",
+             created_extract="ETBC2", created_replicat="RBC2",
+             created_trail_prefix="bc", created_ckpt_table="OGG_BSH.RBC2")
+    d.update(kw)
+    c.execute("INSERT INTO wizard_run(id,kind,state,src_table,cur_step,note,"
+              "created_extract,created_replicat,created_trail_prefix,"
+              "created_ckpt_table) VALUES (:id,:kind,:state,:src_table,"
+              ":cur_step,:note,:created_extract,:created_replicat,"
+              ":created_trail_prefix,:created_ckpt_table)", d)
+
+
+def _chay_don(c, hong=False):
+    t = _tudong_lm(c)
+    t.wizard = _WizardDon(c, hong=hong)
+    t.auth = _AuthGia()
+    asyncio.run(t._don_neu_hong(9, "admin"))
+    return t
+
+
+@test
+def hong_giua_chung_thi_TU_DON_ngay():
+    c = _con_lm()
+    _phien(c)
+    t = _chay_don(c)
+    assert t.wizard.da_don, "khong tu don"
+    assert t.auth.dong and t.auth.dong[0][0][3] == "AUTO_ROLLBACK"
+    assert c.execute("SELECT note FROM wizard_run WHERE id=9"
+                     ).fetchone()[0].startswith("[tự dọn]")
+
+
+@test
+def KHONG_tu_don_khi_phien_chay_xong_binh_thuong():
+    c = _con_lm()
+    _phien(c, state="DONE", note=None)
+    assert not _chay_don(c).wizard.da_don
+
+
+@test
+def KHONG_tu_don_khi_chua_chot_ten_vi_chua_tao_gi():
+    c = _con_lm()
+    _phien(c, created_extract=None, cur_step=3)
+    assert not _chay_don(c).wizard.da_don
+
+
+@test
+def KHONG_tu_don_khi_quy_trinh_la_ADD_TABLE():
+    c = _con_lm()
+    _phien(c, kind="ADD_TABLE")
+    assert not _chay_don(c).wizard.da_don
+
+
+@test
+def don_hong_thi_bao_do_va_KHONG_don_lan_hai():
+    c = _con_lm()
+    _phien(c)
+    t = _chay_don(c, hong=True)
+    assert len(t.wizard.da_don) == 1
+    note = c.execute("SELECT note FROM wizard_run WHERE id=9").fetchone()[0]
+    assert note.startswith("[tự dọn KHÔNG XONG]"), note
+    # lan sau khong duoc don nua
+    assert not _chay_don(c).wizard.da_don

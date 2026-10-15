@@ -12,11 +12,15 @@ Giu 90 ngay raw + rollup theo gio -> file duoi 200 MB vinh vien.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
+import shutil
 import sqlite3
 import time
 from pathlib import Path
+
+log = logging.getLogger("ggadmin.db")
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -225,7 +229,7 @@ CREATE INDEX IF NOT EXISTS ix_pv ON param_version(process, id DESC);
 -- duoc tren bao cao.
 CREATE TABLE IF NOT EXISTS wizard_run (
   id         INTEGER PRIMARY KEY,
-  kind       TEXT NOT NULL CHECK (kind IN ('ADD_TABLE','RESYNC_TABLE','NEW_STREAM')),
+  kind       TEXT NOT NULL CHECK (kind IN ('ADD_TABLE','RESYNC_TABLE','NEW_STREAM','LUONG_MOI')),
   state      TEXT NOT NULL CHECK (state IN ('OPEN','DONE','ABORTED')),
   stream     TEXT,
   src_owner  TEXT NOT NULL DEFAULT 'KT_BSH',
@@ -347,6 +351,54 @@ def connect(path: Path) -> sqlite3.Connection:
     return con
 
 
+def _nang_cap_kind(con: sqlite3.Connection, path: Path) -> None:
+    """Them 'LUONG_MOI' vao CHECK cua wizard_run.kind (2026-10-15).
+
+    SQLite khong ALTER duoc rang buoc CHECK -> phai dung bang moi roi chep
+    sang. Ba chot:
+      1. Chep file DB ra `.premigrate` TRUOC khi dong vao.
+      2. LIET KE COT TUONG MINH, khong `INSERT ... SELECT *`: cot
+         `src_tables` o DB cu duoc them bang ALTER nen nam CUOI, thu tu vat
+         ly khac bang moi -> `SELECT *` se do nham cot.
+      3. Ca cuc trong mot giao dich; hong thi khong doi gi.
+    """
+    r = con.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='wizard_run'"
+    ).fetchone()
+    if not r or "LUONG_MOI" in (r[0] or ""):
+        return
+    cot = [x[1] for x in con.execute("PRAGMA table_info(wizard_run)")]
+    ds = ", ".join(cot)
+    moi = (r[0] or "").replace("CREATE TABLE IF NOT EXISTS wizard_run",
+                               "CREATE TABLE wizard_run_moi", 1)                       .replace("CREATE TABLE wizard_run",
+                               "CREATE TABLE wizard_run_moi", 1)                       .replace("'NEW_STREAM'", "'NEW_STREAM','LUONG_MOI'", 1)
+    if "wizard_run_moi" not in moi or "LUONG_MOI" not in moi:
+        raise RuntimeError("khong dung lai duoc DDL cua wizard_run de nang cap")
+    try:
+        shutil.copy2(path, path.with_name(
+            f"{path.name}.{time.strftime('%Y%m%d-%H%M%S')}.premigrate"))
+    except OSError as e:
+        log.warning("khong luu duoc ban DB truoc nang cap: %s", e)
+    log.info("nang cap wizard_run: them LUONG_MOI vao CHECK(kind)")
+    con.execute("PRAGMA foreign_keys=OFF")
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        con.execute(moi)
+        con.execute(f"INSERT INTO wizard_run_moi({ds}) SELECT {ds} FROM wizard_run")
+        con.execute("DROP TABLE wizard_run")
+        con.execute("ALTER TABLE wizard_run_moi RENAME TO wizard_run")
+        con.execute("CREATE INDEX IF NOT EXISTS ix_wr_state"
+                    " ON wizard_run(state, id DESC)")
+        con.execute("CREATE INDEX IF NOT EXISTS ix_wr_stream"
+                    " ON wizard_run(stream, state)")
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    finally:
+        con.execute("PRAGMA foreign_keys=ON")
+
+
 def init(path: Path) -> sqlite3.Connection:
     con = connect(path)
     con.executescript(SCHEMA)
@@ -362,6 +414,7 @@ def init(path: Path) -> sqlite3.Connection:
     cols = {r[1] for r in con.execute("PRAGMA table_info(wizard_run)")}
     if "src_tables" not in cols:
         con.execute("ALTER TABLE wizard_run ADD COLUMN src_tables TEXT")
+    _nang_cap_kind(con, path)
     for r in DEFAULT_RULES:
         con.execute(
             "INSERT OR IGNORE INTO alert_rule"

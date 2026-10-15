@@ -46,6 +46,9 @@ CHO_JOB_TOI_DA = 3 * 3600
 # Tran tong thoi gian mot luot. CHO_BAT_KIP va CHO_LOW_WM da tu cho ben
 # trong (10 va 20 phut), nen tran nay phai rong hon tong cac cho do.
 TONG_TOI_DA = 6 * 3600
+# LUONG_MOI dai hon han: 29 buoc, co cho Extract bat kip (toi da 20 phut),
+# cho Low WM, va mot dot nap day du.
+TONG_TOI_DA_LUONG_MOI = 10 * 3600
 
 
 class AutoError(RuntimeError):
@@ -88,7 +91,33 @@ def kiem_dieu_kien(con, kind: str, bang: str) -> dict:
             raise AutoError(
                 "%s chưa có dòng MAP trong luồng nào, tức là chưa được đồng "
                 "bộ. Dùng «Thêm bảng vào luồng» trước." % bang)
+    elif kind == "LUONG_MOI":
+        # Bang dau tien cua mot luong CHUA TON TAI: phai chua thuoc luong
+        # nao ca. Ba dieu kien, khong gop lam mot vi ly do tu choi khac nhau
+        # thi viec phai lam cung khac nhau.
+        if r["has_map"]:
+            raise AutoError(
+                "%s đã có dòng MAP trong một luồng. Bảng đầu tiên của luồng mới "
+                "phải chưa thuộc luồng nào." % bang)
+        if r["in_extract"]:
+            raise AutoError(
+                "%s đã có dòng TABLE trong một Extract đang chạy. Gỡ khỏi luồng cũ "
+                "trước, hoặc chọn bảng khác làm bảng đầu tiên." % bang)
+        if r["stream"]:
+            raise AutoError(
+                "Danh sách quản lý ghi %s thuộc luồng %s. Bảng đầu tiên của luồng "
+                "mới phải chưa gắn luồng nào." % (bang, r["stream"]))
+        dang_mo = con.execute(
+            "SELECT id, src_table FROM wizard_run"
+            " WHERE kind IN ('NEW_STREAM','LUONG_MOI') AND state='OPEN'").fetchone()
+        if dang_mo:
+            raise AutoError(
+                "Đang có phiên tạo luồng mới #%s mở (trên %s). Tối đa MỘT phiên "
+                "loại này cùng lúc - nó chạm vào DB nguồn production."
+                % (dang_mo["id"], dang_mo["src_table"]))
     else:
+        # NEW_STREAM (ban thu cong 13 buoc) CO Y khong phai che do nhanh:
+        # ban tron bo la LUONG_MOI.
         raise AutoError("chế độ nhanh chỉ hỗ trợ thêm bảng và đồng bộ lại")
 
     return dict(r)
@@ -108,9 +137,21 @@ class TuDong:
 
     # --------------------------------------------------------------- mo phien
     def mo_phien(self, kind: str, bang: str, *, stream: str, who: str,
-                 keycols: str = "") -> int:
+                 keycols: str = "", ten_moi: dict | None = None) -> int:
         """Mo phien quy trinh. Raise AutoError neu khong du dieu kien."""
         r = kiem_dieu_kien(self.con, kind, bang)
+        if kind == "LUONG_MOI":
+            # Luong CHUA ton tai -> khong doi `stream`, va `Wizard.tao` ep
+            # `stream=None`. Ten cua 4 doi tuong moi dat truoc o day de buoc
+            # KIEM_TEN khong phai dung lai doi nguoi go.
+            try:
+                rid = self.wizard.tao(kind, stream=None, src_table=bang, who=who)
+            except Exception as e:                            # noqa: BLE001
+                raise AutoError(str(e)) from e
+            self.dat_ten_moi(rid, ten_moi or {})
+            if keycols.strip():
+                self.dat_keycols(rid, keycols)
+            return rid
         lu = (r["stream"] or stream or "").strip()
         if not lu:
             raise AutoError(
@@ -138,6 +179,40 @@ class TuDong:
         self.con.execute(
             "UPDATE wizard_run SET keycols=?, updated_at=? WHERE id=?",
             (kc, int(time.time()), rid))
+
+    def dat_ten_moi(self, rid: int, ten: dict) -> None:
+        """Dat truoc 4 ten + ma luong cho phien LUONG_MOI.
+
+        KHONG phai duong vong qua kiem chung - giong het `dat_keycols`.
+        Buoc KIEM_TEN van chay day du va chay TAI THOI DIEM DO: dinh dang
+        ten, danh sach bat kha xam pham, trung voi `info all`, dirprm/<ten>
+        .prm chua ton tai, dirdat/<tien to>* chua co file. Dat truoc chi
+        thay cho viec go vao o cua buoc do.
+
+        Kiem ngay o day mot lan nua la de nguoi dung biet LY DO TU CHOI tu
+        luc bam nut, khong phai sau khi da mo mot phien roi no chet.
+        """
+        import json
+
+        from .adapters import gg
+
+        et = gg.kiem_ten_moi(ten.get("extract", ""), "extract")
+        rep = gg.kiem_ten_moi(ten.get("replicat", ""), "replicat")
+        pre = gg.kiem_ten_moi(ten.get("trail_prefix", ""), "trail")
+        if et == rep:
+            raise AutoError("Tên Extract và Replicat không được giống nhau")
+        ck = (ten.get("ckpt_table") or f"OGG_BSH.{rep}").strip().upper()
+        if "." not in ck:
+            ck = f"OGG_BSH.{ck}"
+        gg.kiem_ten_moi(ck.split(".")[-1], "checkpointtable")
+        ctx = {"luong_moi": {"sid": (ten.get("stream_id") or pre).strip().upper(),
+                             "ten": (ten.get("stream_ten") or "").strip()}}
+        self.con.execute(
+            "UPDATE wizard_run SET created_extract=?, created_replicat=?,"
+            " created_trail_prefix=?, created_ckpt_table=?, ctx_json=?,"
+            " updated_at=? WHERE id=?",
+            (et, rep, pre, ck, json.dumps(ctx, ensure_ascii=False),
+             int(time.time()), rid))
 
     def kiem_tiep(self, rid: int) -> dict:
         """Kiem truoc khi chay tiep mot phien dang dung. Tra run, hoac raise.
@@ -175,20 +250,78 @@ class TuDong:
             self._ghi_loi(rid, "lỗi không lường trước: %s" % e)
         finally:
             self.dang_chay.discard(rid)
+        await self._don_neu_hong(rid, who)
+
+    # ------------------------------------------------- tu don khi hong
+    async def _don_neu_hong(self, rid: int, who: str) -> None:
+        """LUONG_MOI hong giua chung -> TU DON SACH ngay.
+
+        YEU CAU CUA NGUOI DUNG 2026-10-15: "hỏng đâu dọn đó". Ly do chinh
+        dang: tu buoc REGISTER_EXTRACT, phien da dang ky mot tien trinh doc
+        redo vao DB NGUON production; de lai la no giu archive log va dao
+        redo vo ich MAI MAI.
+
+        CAI DANH DOI, noi ro vi no co that: lenh don chay
+        `UNREGISTER EXTRACT ... DATABASE` len chinh DB nguon - nguy hiem hon
+        chinh buoc vua hong, va khong hoan tac duoc. No cung xoa mat hien
+        truong o GoldenGate de chan doan. Vi vay:
+          1. HIEN TRUONG trong DB cua cong cu duoc giu NGUYEN truoc khi don:
+             `note` ly do dung, `wizard_step.preview` va `output` cua buoc
+             hong khong bi dong vao.
+          2. Ghi mot dong audit AUTO_ROLLBACK noi ro don vi buoc nao.
+          3. KHONG BAO GIO tu don lan hai: don ma loi thi dung han, bao do,
+             de nguoi doc 2 cau SQL kiem tay.
+        """
+        try:
+            run = self.wizard.lay(rid)
+        except Exception:                                     # noqa: BLE001
+            return
+        if run["kind"] != "LUONG_MOI" or run["state"] != "OPEN":
+            return
+        note = run["note"] or ""
+        if not note.startswith("[thao tác nhanh dừng]"):
+            return                      # khong phai dung vi loi
+        if "tự dọn" in note:
+            return                      # da tu don mot lan roi - khong lam lai
+        if not run["created_extract"]:
+            return                      # chua chot ten -> chua tao gi de don
+
+        ly_do = "tự dọn sau khi %s" % note[len("[thao tác nhanh dừng] "):][:200]
+        log.warning("thao tác nhanh #%s: TU DON SACH - %s", rid, ly_do)
+        try:
+            self.auth.audit(who, "auto", "L2", "AUTO_ROLLBACK",
+                            target="%d:%s" % (rid, run["created_extract"]),
+                            reason=ly_do)
+        except Exception:                                     # noqa: BLE001
+            log.exception("khong ghi duoc audit AUTO_ROLLBACK #%s", rid)
+        try:
+            r = await self.wizard.rollback_new_stream(rid, who, ly_do)
+            self.con.execute(
+                "UPDATE wizard_run SET note=?, updated_at=? WHERE id=?",
+                ("[tự dọn] " + note[len("[thao tác nhanh dừng] "):][:300]
+                 + " || " + str(r.get("msg", ""))[:200], int(time.time()), rid))
+        except Exception as e:                                # noqa: BLE001
+            log.exception("thao tác nhanh #%s: TU DON KHONG XONG", rid)
+            self.con.execute(
+                "UPDATE wizard_run SET note=?, updated_at=? WHERE id=?",
+                ("[tự dọn KHÔNG XONG] " + note[len("[thao tác nhanh dừng] "):][:250]
+                 + " || dọn lỗi: " + str(e)[:250], int(time.time()), rid))
 
     async def _chay(self, rid: int, who: str, ly_do: str, t0: float) -> None:
         from .wizard import BO_BUOC, buoc_cua
 
         run = self.wizard.lay(rid)
         tong = max(x.no for x in BO_BUOC[run["kind"]])
+        tran = (TONG_TOI_DA_LUONG_MOI if run["kind"] == "LUONG_MOI"
+                else TONG_TOI_DA)
         log.info("thao tác nhanh #%s %s trên %s: bắt đầu",
                  rid, run["kind"], run["src_table"])
 
         while True:
-            if time.monotonic() - t0 > TONG_TOI_DA:
+            if time.monotonic() - t0 > tran:
                 self._ghi_loi(rid, "vượt trần %d giờ cho một lượt - dừng lại. "
                                    "Mở trang quy trình để đi tiếp bằng tay."
-                              % (TONG_TOI_DA // 3600))
+                              % (tran // 3600))
                 return
 
             run = self.wizard.lay(rid)

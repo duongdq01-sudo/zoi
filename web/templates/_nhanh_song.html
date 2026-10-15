@@ -22,13 +22,20 @@
 
 {% for p in phien %}
 {% set r = p.run %}
-{% set dung = r.note and 'dừng' in r.note %}
+{% set dung = r.note and ('dừng' in r.note or 'dọn' in r.note) %}
+{% set la_lm = r.kind == 'LUONG_MOI' %}
+{% set da_don = r.note and 'tự dọn' in r.note %}
 <article style="border-left:5px solid {{ 'var(--danger)' if dung else ('var(--orange-500)' if p.dang_chay else 'var(--blue-500)') }}">
   <header>
     <strong>Quy trình #{{ r.id }}</strong>
     <code>{{ r.kind }}</code> trên <code>{{ r.src_table }}</code>
-    <small class="muted">luồng {{ r.stream }} &middot; mở bởi {{ r.created_by }}
-      lúc {{ r.created_at|hhmm }}</small>
+    <small class="muted">
+      {%- if r.stream %}luồng {{ r.stream }}
+      {%- elif la_lm %}<span class="warn">luồng CHƯA đăng ký &mdash; bước 14 sẽ ghi
+        vào app.toml</span>
+      {%- endif %}
+      {%- if r.created_extract %} &middot; <code>{{ r.created_extract }}</code>/<code>{{ r.created_replicat }}</code>{% endif %}
+      &middot; mở bởi {{ r.created_by }} lúc {{ r.created_at|hhmm }}</small>
     <span class="pill {{ 'bad' if dung else ('warn' if p.dang_chay else '') }}"
           style="float:right">
       {% if dung %}ĐÃ DỪNG
@@ -94,13 +101,45 @@
   </details>
   {% endfor %}
 
-  {% if dung %}
+  {# Khoi phuc chi co nghia voi luong DA ton tai: `khoiphuc.kham` no voi
+     luong la, va dua mot luong dang xay dang do "ve an toan" la vo nghia. #}
+  {% if dung and r.stream %}
   <div style="margin:.6rem 0;padding:.6rem;border:2px solid var(--danger);border-radius:8px">
     <strong class="bad">Việc đầu tiên: đưa luồng về an toàn</strong>
     <p><small>Lượt này dừng giữa đường, nên luồng <code>{{ r.stream }}</code>
       có thể đang ở trạng thái nửa vời. Chạy cái này <strong>trước</strong>
       khi tìm nguyên nhân.</small></p>
     {{ nut_khoiphuc(r.stream) }}
+  </div>
+  {% endif %}
+
+  {% if la_lm and not p.dang_chay and r.created_extract and r.cur_step >= 10 %}
+  {# DON SACH. Bo lai DA tu don khi mot buoc hong (yeu cau nguoi dung
+     2026-10-15), nen khoi nay chi con hai cong dung - va ca hai deu that:
+       - tu don KHONG XONG (lenh unregister loi) -> phai co duong bam tay
+       - phien o lai trang thai mo vi ly do khac (app khoi dong lai giua
+         chung) -> khong ai tu don cho no #}
+  <div style="margin:.6rem 0;padding:.6rem;border:3px solid var(--danger);border-radius:8px">
+    <strong class="bad">Lượt này đã chạy qua bước đăng ký ở DB NGUỒN</strong>
+    <p><small>Từ bước 10, <code>{{ r.created_extract }}</code> đã được đăng ký vào DB
+    nguồn production. Không đi tiếp được thì <strong>phải dọn sạch</strong>: một tiến
+    trình đọc redo mồ côi sẽ giữ archive log và đọc redo VĨNH VIỄN.
+    {% if da_don %}<br><strong class="bad">Công cụ đã tự dọn một lần và chưa xong</strong>
+    &mdash; đọc lý do ở phần trạng thái bên trên rồi dọn lại bằng tay, hoặc kiểm hai câu
+    SQL mà bước dọn đã in ra.{% endif %}
+    <br>&laquo;Dọn sạch&raquo; chạy đúng thứ tự: gỡ khối <code>[streams]</code> khỏi
+    <code>conf/app.toml</code>, dừng tiến trình, xoá Replicat, xoá bảng checkpoint, xoá
+    Extract, <strong>bỏ đăng ký ở DB nguồn</strong>, xoá file tham số và trail của phiên.
+    <br>Nó <strong>không</strong> xoá bảng đích đã tạo (có thể đã có dữ liệu) và
+    <strong>không</strong> tắt TRANDATA ở bảng nguồn.</small></p>
+    <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+      <input type="hidden" name="op" value="WIZARD_ROLLBACK">
+      <input type="hidden" name="target" value="{{ r.id }}">
+      <input type="text" name="reason" required minlength="10"
+             placeholder="lý do dọn sạch (từ 10 ký tự)">
+      <button type="submit" class="contrast">Dọn sạch phiên #{{ r.id }} &mdash; sẽ phải
+        nhập lại <code>{{ r.created_extract }}</code></button>
+    </form>
   </div>
   {% endif %}
 
@@ -113,7 +152,7 @@
         style="margin-top:.6rem">
     <input type="hidden" name="op" value="AUTO_TIEP">
     <input type="hidden" name="target" value="{{ r.id }}">
-    {% if r.cur_step == 2 and not r.keycols %}
+    {% if p.buoc_keycols and r.cur_step == p.buoc_keycols and not r.keycols %}
     <label>KEYCOLS &mdash; các cột khoá, cách nhau bằng dấu phẩy
       <input type="text" name="keycols" placeholder="VÍ DỤ: MA_DVI, MA_KENH"
              style="text-transform:uppercase">
@@ -121,6 +160,12 @@
     <small class="muted">Bảng không có khoá chính thật thì phải nhập ở đây,
       lượt chạy mới qua được bước 2. Bộ cột vẫn được kiểm tính duy nhất trên
       dữ liệu thật và đếm NULL từng cột.</small>
+    {% endif %}
+    {% if la_lm and p.buoc_ten and r.cur_step == p.buoc_ten and not r.created_extract %}
+    <div hx-get="/nhanh/goi-y?bang={{ r.src_table }}" hx-trigger="load"
+         hx-swap="innerHTML">
+      <p><small class="muted">đang lấy gợi ý tên...</small></p>
+    </div>
     {% endif %}
     <input type="text" name="reason" required minlength="10"
            placeholder="lý do chạy tiếp (từ 10 ký tự)">

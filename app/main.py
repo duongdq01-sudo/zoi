@@ -62,6 +62,33 @@ verifier = Verifier(cfg, con, ora, collector, control)
 wizard = Wizard(cfg, con, ora, control, verifier)
 tudong = auto.TuDong(cfg, con, wizard, pre, auth, lambda o, t: _pf_cua(o, t))
 
+# HAI DANH SACH TEN, HAI MUC DICH - dat ngay luc khoi dong.
+#
+#   gg.PROCESSES        : app duoc phep DIEU KHIEN (start/stop/detail/param)
+#   gg.BAT_KHA_XAM_PHAM : app KHONG duoc tao/xoa/dang ky, ke ca khi mot
+#                         phien khai ten do trong danh sach cho phep
+#
+# Luong do quy trinh LUONG_MOI tao ra nam trong app.toml nhu moi luong khac,
+# nen vong lap duoi day tu dong nhan chung sau khi khoi dong lai. NHUNG ten
+# cua mot phien tao luong moi DANG MO duoc MIEN TRU khoi danh sach thu hai -
+# neu khong thi chinh chuc nang don sach cua phien do bi chan, va mot tien
+# trinh doc redo mo coi se o lai DB nguon.
+_phien_mo = con.execute(
+    "SELECT created_extract, created_replicat, created_trail_prefix,"
+    " created_ckpt_table FROM wizard_run"
+    " WHERE kind IN ('NEW_STREAM','LUONG_MOI') AND state='OPEN'").fetchall()
+_mien_tru = {str(x).upper() for r in _phien_mo for x in tuple(r) if x}
+_mien_tru |= {str(r["created_ckpt_table"]).split(".")[-1].upper()
+              for r in _phien_mo if r["created_ckpt_table"]}
+for _sid, _st in cfg.streams.items():
+    gg.dang_ky_process(_st["extract"], _st["replicat"])
+    gg.khoa_dang_chay({_st["extract"].upper(), _st["replicat"].upper(),
+                       _st["trail"].upper(), f'OGG_BSH.{_st["replicat"]}'.upper()}
+                      - _mien_tru)
+if _mien_tru:
+    log.info("miễn trừ khỏi danh sách bất khả xâm phạm (phiên tạo luồng mới "
+             "đang mở): %s", ", ".join(sorted(_mien_tru)))
+
 # Tai khoan dau tien. must_change=False theo yeu cau nguoi dung (admin/a123),
 # nhung co che doi mat khau van giu de siet sau nay de.
 if db.ensure_user(con, "admin", "a123", "ADMIN", "Quan tri", must_change=False):
@@ -541,6 +568,9 @@ OPS: dict[str, tuple[str, str, str]] = {
     "AUTO_ADD_TABLE":    (L2, "KHONG_CO",          "Thao tác nhanh: thêm bảng vào luồng"),
     "AUTO_RESYNC":       (L2, "KHONG_CO",          "Thao tác nhanh: đồng bộ lại bảng"),
     "AUTO_TIEP":         (L2, "KHONG_CO",          "Thao tác nhanh: chạy tiếp phiên đang dừng"),
+    # Thao tac NGUY HIEM NHAT cua cong cu: dang ky mot tien trinh doc redo
+    # vao DB NGUON production, va ghi vao conf/app.toml.
+    "AUTO_NEW_STREAM":   (L2, "KHONG_CO",          "Thao tác nhanh: tạo luồng MỚI và đưa bảng đầu tiên vào"),
     # Khoi phuc an toan: CHI start/stop, nen hoan tac duoc -> L1.
     # Khong phai L2: khi dang co su co, bat go tay ten bang la dat them ma
     # sat vao dung luc can nhanh nhat, ma khong doi lay them an toan nao -
@@ -557,7 +587,7 @@ def _deny_html(e: Exception, code: int = 403) -> HTMLResponse:
 
 def _pf_cua(op: str, target: str) -> tuple[str, str]:
     """Pre-flight nao ap cho op nay, tren doi tuong nao."""
-    if op in ("AUTO_ADD_TABLE", "AUTO_RESYNC"):
+    if op in ("AUTO_ADD_TABLE", "AUTO_RESYNC", "AUTO_NEW_STREAM"):
         # Muc kiem rieng, KHONG dung "KHONG_CO": nhan cua KHONG_CO la "thao
         # tac chi doc", hien dong do truoc mot luot co the xoa sach bang la
         # gay nham theo huong nguy hiem nhat.
@@ -588,7 +618,10 @@ def _pf_cua(op: str, target: str) -> tuple[str, str]:
 async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                      reason: str = Form(""), payload: str = Form(""),
                      expect_sha: str = Form(""), stream_sel: str = Form(""),
-                     keycols: str = Form("")):
+                     keycols: str = Form(""),
+                     ns_extract: str = Form(""), ns_replicat: str = Form(""),
+                     ns_trail: str = Form(""), ns_ckpt: str = Form(""),
+                     ns_sid: str = Form(""), ns_ten: str = Form("")):
     u = current_user(req)
     if not u:
         return HTMLResponse("<p>Chưa đăng nhập</p>", status_code=401)
@@ -640,6 +673,44 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                  "stream": (payload or stream_sel or "").strip(),
                  "keycols": keycols.strip().upper()}
         dif = ""
+    if op == "AUTO_NEW_STREAM":
+        # Tao luong MOI. Kiem DU dieu kien NGAY LUC ARM - bi tu choi thi
+        # phai biet ly do truoc khi go ten, khong phai sau khi da dang ky
+        # mot capture vao DB nguon.
+        tb = (target or "").strip().upper()
+        try:
+            auto.kiem_dieu_kien(con, "LUONG_MOI", tb)
+            ns_et = gg.kiem_ten_moi(ns_extract, "extract")
+            ns_rep = gg.kiem_ten_moi(ns_replicat, "replicat")
+            ns_pre = gg.kiem_ten_moi(ns_trail, "trail")
+            if ns_et == ns_rep:
+                raise ValueError("Tên Extract và Replicat không được giống nhau")
+            ns_ck = (ns_ckpt or f"OGG_BSH.{ns_rep}").strip().upper()
+            if "." not in ns_ck:
+                ns_ck = f"OGG_BSH.{ns_ck}"
+            gg.kiem_ten_moi(ns_ck.split(".")[-1], "checkpointtable")
+        except (auto.AutoError, gg.Blocked, ValueError) as e:
+            return _deny_html(e, 400)
+        sid = (ns_sid or ns_pre).strip().upper()
+        if sid in cfg.streams:
+            return _deny_html(ValueError(
+                f"Mã luồng {sid} đã có trong conf/app.toml"), 400)
+        for ten_cu, st in cfg.streams.items():
+            if (st["extract"].upper() == ns_et or st["replicat"].upper() == ns_rep
+                    or st["trail"].lower() == ns_pre):
+                return _deny_html(ValueError(
+                    f"Tên trùng với luồng {ten_cu} đang chạy"), 400)
+        # GO TAY TEN EXTRACT, khong phai ten bang: doi tuong nguy hiem o day
+        # la tien trinh doc redo sap duoc dang ky vao DB nguon production.
+        # Giong het nghi thuc cua WIZARD_ROLLBACK.
+        extra = {"go_tay": ns_et, "bang": tb, "extract": ns_et,
+                 "replicat": ns_rep, "trail_prefix": ns_pre,
+                 "ckpt_table": ns_ck, "stream_id": sid,
+                 "stream_ten": ns_ten.strip(),
+                 "keycols": keycols.strip().upper()}
+        # Ban xem truoc = DUNG KHOI se duoc ghi vao conf/app.toml.
+        from . import toml_ghi
+        dif = toml_ghi.khoi_streams(sid, ns_et, ns_rep, ns_pre, ns_ten.strip())
     if op == "AUTO_TIEP":
         # Chay tiep mot phien dang dung. Van la L2 va van go tay TEN BANG
         # cua phien do: "chay tiep" co the di thang vao buoc khong hoan tac
@@ -650,14 +721,28 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
             return _deny_html(e, 400)
         extra = {"go_tay": run_tiep["src_table"],
                  "keycols": keycols.strip().upper()}
+        if run_tiep["kind"] == "LUONG_MOI":
+            # Phien tao luong moi dung o buoc chot ten -> nhan ten o day,
+            # va go tay TEN EXTRACT thay vi ten bang.
+            if ns_extract or ns_replicat or ns_trail:
+                extra.update({"extract": ns_extract.strip().upper(),
+                              "replicat": ns_replicat.strip().upper(),
+                              "trail_prefix": ns_trail.strip().lower(),
+                              "ckpt_table": ns_ckpt.strip().upper(),
+                              "stream_id": (ns_sid or ns_trail).strip().upper(),
+                              "stream_ten": ns_ten.strip()})
+            go = run_tiep["created_extract"] or ns_extract.strip().upper()
+            if go:
+                extra["go_tay"] = go
         dif = ""
     if op == "WIZARD_ROLLBACK":
         try:
             run = wizard.lay(int(target))
         except (WizardError, ValueError) as e:
             return _deny_html(e, 400)
-        if run["kind"] != "NEW_STREAM":
-            return _deny_html(ValueError("rollback nay chi cho NEW_STREAM"), 400)
+        if run["kind"] not in ("NEW_STREAM", "LUONG_MOI"):
+            return _deny_html(ValueError(
+                "rollback nay chi cho quy trinh tao luong moi"), 400)
         # Go tay TEN EXTRACT: do moi la thu nguoi dung can doc lai mot lan
         # nua truoc khi UNREGISTER mot capture o DB nguon production.
         extra = {"go_tay": run["created_extract"] or f"#{target}"}
@@ -768,6 +853,11 @@ def _luong_cua(p) -> str:
             r = con.execute("SELECT stream FROM wizard_run WHERE id=?",
                             (int(rid),)).fetchone()
             return (r["stream"] or "") if r else ""
+        if p.action == "AUTO_NEW_STREAM":
+            # Luc ban co chua co phien va chua co luong - khong co gi de
+            # "khoi phuc". Nut dung o day la DON SACH, do khung theo doi
+            # song hien ra, khong phai nut khoi phuc.
+            return ""
         if p.action in ("AUTO_ADD_TABLE", "AUTO_RESYNC", "ADD_TRANDATA"):
             r = con.execute(
                 "SELECT stream FROM managed_table WHERE src_table=?",
@@ -890,6 +980,32 @@ async def _thuc_thi(p, who: str) -> dict:
                     "",
                     "/wizard/%s" % rid]}
 
+    if op == "AUTO_NEW_STREAM":
+        import asyncio as _a
+        rid = tudong.mo_phien(
+            "LUONG_MOI", p.extra["bang"], stream="", who=who,
+            keycols=p.extra.get("keycols") or "",
+            ten_moi={k: p.extra.get(k, "") for k in (
+                "extract", "replicat", "trail_prefix", "ckpt_table",
+                "stream_id", "stream_ten")})
+        _a.create_task(tudong.chay(rid, who=who, ly_do=p.reason))
+        return {"msg": "Đã mở quy trình tạo luồng mới #%s (29 bước) và bắt đầu "
+                       "chạy tự động. Theo dõi ở khung bên trên." % rid,
+                "chi_tiet": [
+                    "Buoc 10 dang ky mot tien trinh doc redo vao DB NGUON.",
+                    "Buoc 14 ghi them khoi [streams.%s] vao conf/app.toml"
+                    % p.extra.get("stream_id", ""),
+                    "  (luu ban cu, ghi nguyen tu, doc lai doi chieu) roi nap nong",
+                    "  - KHONG phai khoi dong lai cong cu.",
+                    "",
+                    "Hong o bat ky buoc nao -> bo lai TU DON SACH ngay, theo",
+                    "yeu cau cua nguoi dung: dung tien trinh, xoa Replicat, xoa",
+                    "bang checkpoint, xoa Extract, BO DANG KY o DB nguon, go",
+                    "khoi [streams] khoi app.toml, xoa param va trail.",
+                    "Khong dung toi bang dich da tao va du lieu da nap.",
+                    "",
+                    "/wizard/%s" % rid]}
+
     if op == "AUTO_TIEP":
         import asyncio as _a
         rid = int(t)
@@ -897,6 +1013,10 @@ async def _thuc_thi(p, who: str) -> dict:
         kc = p.extra.get("keycols") or ""
         if kc:
             tudong.dat_keycols(rid, kc)
+        if p.extra.get("extract"):
+            tudong.dat_ten_moi(rid, {k: p.extra.get(k, "") for k in (
+                "extract", "replicat", "trail_prefix", "ckpt_table",
+                "stream_id", "stream_ten")})
         _a.create_task(tudong.chay(rid, who=who, ly_do=p.reason))
         return {"msg": "Phiên #%s chạy tiếp từ bước đang dừng. Theo dõi ở "
                        "khung bên trên." % rid,
@@ -1083,10 +1203,36 @@ async def trang_nhanh(req: Request):
     resync = [dict(r) for r in con.execute(
         "SELECT src_table, stream FROM managed_table"
         " WHERE has_map=1 AND src_table=tgt_table ORDER BY stream, src_table")]
+    # Bang lam duoc "bang dau tien cua luong moi": chua thuoc luong nao ca.
+    moi = [dict(r) for r in con.execute(
+        "SELECT src_table FROM managed_table"
+        " WHERE has_map=0 AND in_extract=0 AND (stream IS NULL OR stream='')"
+        " AND src_table=tgt_table ORDER BY src_table")]
     # Khong truyen danh sach phien o day: khung theo doi song (`/nhanh/song`)
     # tu doc, va doc moi 3-10 giay chu khong phai mot lan luc tai trang.
     return tpl.TemplateResponse(req, "nhanh.html", ctx(
-        req, them=them, resync=resync))
+        req, them=them, resync=resync, moi=moi))
+
+
+@app.get("/nhanh/goi-y", response_class=HTMLResponse)
+async def nhanh_goi_y(req: Request, ma: str = "", bang: str = ""):
+    """Goi y bo ten cho luong moi. CHI DOC - khong ghi gi, khong mo phien.
+
+    Day la TIEN NGHI, khong phai chot an toan: buoc KIEM_TEN cua quy trinh
+    van kiem lai tat ca TAI THOI DIEM CHAY (trung `info all`, dirprm/<ten>
+    .prm, dirdat/<tien to>*). Giua luc goi y va luc chay, trang thai he
+    thong co the da doi.
+    """
+    if not current_user(req):
+        return HTMLResponse("")
+    dang_dung = {x.upper() for st in cfg.streams.values()
+                 for x in (st["extract"], st["replicat"], st["trail"])}
+    dang_dung |= {str(x).upper() for r in con.execute(
+        "SELECT created_extract, created_replicat, created_trail_prefix"
+        " FROM wizard_run WHERE state='OPEN'") for x in tuple(r) if x}
+    dang_dung |= {k.upper() for k in cfg.streams}
+    g = gg.goi_y_ten(ma, dang_dung, bang=bang)
+    return tpl.TemplateResponse(req, "_nhanh_goiy.html", ctx(req, g=g))
 
 
 @app.get("/nhanh/song", response_class=HTMLResponse)
@@ -1108,6 +1254,7 @@ async def nhanh_song(req: Request):
         return HTMLResponse("")
     mo = [dict(r) for r in con.execute(
         "SELECT id, kind, state, stream, src_table, cur_step, note, keycols,"
+        " created_extract, created_replicat, created_trail_prefix,"
         " created_at, created_by FROM wizard_run WHERE state='OPEN'"
         " ORDER BY id DESC LIMIT 3")]
     phien = []
@@ -1130,7 +1277,11 @@ async def nhanh_song(req: Request):
                     b["job_id"] = jid
                     b["log"] = jobmod.duoi_log(cfg, jid, 18)
         phien.append({"run": run, "tong": tong, "buoc": buoc,
-                      "dang_chay": rid in tudong.dang_chay})
+                      "dang_chay": rid in tudong.dang_chay,
+                      # buoc nao la buoc hoi cot khoa / hoi ten, theo loai
+                      "buoc_keycols": {"ADD_TABLE": 2, "LUONG_MOI": 3}.get(
+                          run["kind"]),
+                      "buoc_ten": 4 if run["kind"] == "LUONG_MOI" else None})
     return tpl.TemplateResponse(req, "_nhanh_song.html", ctx(req, phien=phien))
 
 

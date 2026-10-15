@@ -42,8 +42,14 @@ ROW = re.compile(r"^(MANAGER|EXTRACT|REPLICAT)\s+(\S+)(?:\s+(\S+))?"
 HHMMSS = re.compile(r"^\d\d:\d\d:\d\d$")
 BAD_ARG = re.compile(r"[\n\r;!]")
 
-# Process duoc phep tac dong - enum co dinh, khong nhan gia tri ngoai danh sach
-PROCESSES = frozenset({"ETPMNV", "ETHT", "ETDTHU", "RPMNVODS", "RHT", "RDTHU", "MGR"})
+# Process duoc phep tac dong. Truoc 2026-10-15 day la frozenset hang so.
+#
+# VI SAO BAY GIO LA SET: quy trinh LUONG_MOI tao ra Extract/Replicat moi va
+# phai dieu khien duoc chung NGAY trong phien do (start, stop, doc param),
+# khong doi restart app. `dang_ky_process()` la cua duy nhat them ten vao
+# day, va no KHONG dong thoi lam ten do thanh bat kha xam pham - xem
+# `khoa_dang_chay()` ngay duoi.
+PROCESSES: set[str] = {"ETPMNV", "ETHT", "ETDTHU", "RPMNVODS", "RHT", "RDTHU", "MGR"}
 
 # Alias SUY RA TU INTENT, nguoi dung KHONG duoc chon.
 # Ly do: ca 2 DB deu co SERVICE_NAME = BSHC nen prompt GGSCI hien @BSHC cho
@@ -550,12 +556,43 @@ async def add_trandata(cfg, owner: str, table: str,
 # =====================================================================
 
 # Doi tuong dang CHAY - khong lenh nao cua app duoc cham vao.
-BAT_KHA_XAM_PHAM = frozenset(
+#
+# HAI DANH SACH, HAI MUC DICH - dung gop lam mot:
+#   PROCESSES        : app duoc phep DIEU KHIEN (start/stop/detail/param)
+#   BAT_KHA_XAM_PHAM : app KHONG duoc tao/xoa/dang ky, KE CA khi phien khai
+#                      ten do trong danh sach cho phep cua no
+# Tien trinh do chinh mot phien LUONG_MOI tao ra phai nam trong danh sach
+# dau va KHONG nam trong danh sach sau - neu khong thi chinh chuc nang don
+# sach cua phien do bi lop 3 chan, va mot capture mo coi se o lai DB nguon.
+BAT_KHA_XAM_PHAM: set[str] = (
     {p.upper() for p in PROCESSES}
     | {"PM", "HT", "DT"}                                   # trail prefix
     | {"OGG_BSH.RPMNVODS", "OGG_BSH.RHT", "OGG_BSH.RDTHU"}  # checkpoint table
     | {"RPMNVODS", "RHT", "RDTHU"}
 )
+
+
+def dang_ky_process(*ten: str) -> None:
+    """Cho app dieu khien them tien trinh MOI (LUONG_MOI buoc DANG_KY_CAU_HINH).
+
+    CO Y khong dong thoi dua vao BAT_KHA_XAM_PHAM: phien dang mo con phai
+    don sach duoc cai no vua tao.
+    """
+    for t in ten:
+        if t and t.strip():
+            PROCESSES.add(t.strip().upper())
+
+
+def khoa_dang_chay(ten) -> None:
+    """Dua ten vao danh sach bat kha xam pham.
+
+    Goi luc khoi dong cho cac luong KHONG thuoc mot phien LUONG_MOI dang mo,
+    va khi phien do ket thuc. Tu luc nay app khong con tao/xoa/dang ky duoc
+    chung nua - dung nhu 6 tien trinh goc.
+    """
+    for t in ten:
+        if t and str(t).strip():
+            BAT_KHA_XAM_PHAM.add(str(t).strip().upper())
 
 # Ten group GoldenGate: toi da 8 ky tu.
 TEN_GROUP = re.compile(r"^[A-Z][A-Z0-9_]{1,7}$")
@@ -587,7 +624,113 @@ def kiem_ten_moi(ten: str, loai: str) -> str:
         raise Blocked(
             f"{ten!r} là đối tượng ĐANG CHẠY - bất khả xâm phạm. Công cụ không tạo, "
             "không sửa, không xoá được các tên này.")
+
+    # LUAT VAI TRO - khong phai quy uoc tham my, va dat SAU lop bat kha xam
+    # pham vi thu tu lop khong duoc dao.
+    # `alias_for()`, `start_process()` va `stop_process()` suy ra EXTRACT hay
+    # REPLICAT tu HAI KY TU DAU cua ten. Mot Replicat ten "ETX" se bi chay
+    # bang `start extract` va dblogin vao DB NGUON. Chan tu luc dat ten, vi
+    # doi ten mot process da tao thi phai xoa di tao lai.
+    if loai == "extract" and not t.startswith("ET"):
+        raise Blocked(
+            f"Tên Extract phải bắt đầu bằng ET (nhận được {ten!r}): lệnh start/stop "
+            "và dblogin suy ra vai trò từ hai ký tự đầu của tên.")
+    if loai == "replicat" and t.startswith("ET"):
+        raise Blocked(
+            f"Tên Replicat KHÔNG được bắt đầu bằng ET (nhận được {ten!r}): công cụ "
+            "sẽ chạy `start extract` và đăng nhập vào DB NGUỒN.")
     return t
+
+
+def _ma_goc(ma: str, bang: str = "") -> str:
+    """Rut MA LUONG tu o nguoi go, hoac tu ten bang neu bo trong.
+
+    `HT_MA_KENH_BAN` -> `HT`: phan truoc dau gach duoi dau tien la quy uoc
+    dat ten bang o day, va cung la thu DBA se go neu phai tu nghi.
+    """
+    t = re.sub(r"[^A-Za-z0-9_]", "", (ma or "").strip()).upper()
+    if not t and bang:
+        dau = re.sub(r"[^A-Za-z0-9_]", "", bang.strip()).upper().split("_")[0]
+        t = dau if len(dau) >= 2 else re.sub(r"[^A-Z0-9]", "", bang.upper())[:3]
+    t = t.lstrip("0123456789_")
+    return t[:6]
+
+
+def _thu_ten(ung_vien, dang_dung: set[str], loai: str) -> tuple[str, list[str]]:
+    """Thu lan luot cac ung vien, tra cai dau tien QUA DUOC kiem_ten_moi.
+
+    Tra ("", [ly do...]) neu het ung vien - KHONG bao gio tra mot ten xau
+    cho giao dien dien san.
+    """
+    bo_qua: list[str] = []
+    for uv in ung_vien:
+        if not uv:
+            continue
+        if uv.upper() in dang_dung:
+            bo_qua.append(f"{uv}: đã dùng")
+            continue
+        try:
+            return kiem_ten_moi(uv, loai), bo_qua
+        except Blocked as e:
+            bo_qua.append(f"{uv}: {e}")
+    return "", bo_qua
+
+
+def goi_y_ten(ma: str, dang_dung=None, *, bang: str = "") -> dict:
+    """Goi y bo ten cho mot luong moi. KHONG BAO GIO tra ten dang dung.
+
+    Day la TIEN NGHI, khong phai chot an toan: buoc KIEM_TEN cua wizard van
+    kiem lai tat ca tai thoi diem chay (trung `info all`, dirprm/<ten>.prm,
+    dirdat/<tien to>*). Giua luc goi y va luc chay, trang thai he thong co
+    the da doi - cho phan quyet nam o buoc do, khong phai o day.
+
+    Thuan va TAT DINH: cung dau vao cho cung dau ra, khong doc gio, khong
+    random. Nho vay test duoc va nguoi dung go lai ma cu thi thay ten cu.
+    """
+    dung = {str(x).strip().upper() for x in (dang_dung or ()) if str(x).strip()}
+    dung |= {x.upper() for x in BAT_KHA_XAM_PHAM}
+    goc = _ma_goc(ma, bang)
+    gc: list[str] = []
+    if not goc:
+        return {"stream_id": "", "extract": "", "replicat": "", "trail_prefix": "",
+                "ckpt_table": "", "ghi_chu": ["Chưa có mã luồng để gợi ý."]}
+
+    # Extract: ET + ma, toi da 8 ky tu. Trung thi them so duoi, van <= 8.
+    than = goc[:6]
+    uv_et = [f"ET{than}"] + [f"ET{than[:5]}{i}" for i in range(2, 10)]
+    et, bq = _thu_ten(uv_et, dung, "extract")
+    gc += bq
+
+    # Replicat: R + ma. Khong bao gio bat dau bang ET vi luon bat dau bang R.
+    than_r = goc[:7]
+    uv_r = [f"R{than_r}"] + [f"R{than_r[:6]}{i}" for i in range(2, 10)]
+    rep, bq = _thu_ten(uv_r, dung, "replicat")
+    gc += bq
+
+    # Trail prefix: DUNG 2 chu thuong. Khong gian rat hep nen phai co duong
+    # lui: 2 chu dau cua ma -> chu dau + a..z -> moi cap aa..zz.
+    chu = re.sub(r"[^A-Z]", "", goc).lower()
+    uv_tr = []
+    if len(chu) >= 2:
+        uv_tr.append(chu[:2])
+    if chu:
+        uv_tr += [chu[0] + c for c in "abcdefghijklmnopqrstuvwxyz"]
+    uv_tr += [a + b for a in "abcdefghijklmnopqrstuvwxyz"
+              for b in "abcdefghijklmnopqrstuvwxyz"]
+    tr, bq = _thu_ten(uv_tr, dung, "trail")
+    gc += bq[:3]                      # khong do ca bang chu vao man hinh
+
+    ck = f"OGG_BSH.{rep}" if rep else ""
+    if ck and (ck.upper() in dung or rep.upper() in dung):
+        ck = ""
+        gc.append(f"Bảng checkpoint OGG_BSH.{rep}: đã dùng")
+    thieu = [n for n, v in (("Extract", et), ("Replicat", rep),
+                            ("tiền tố trail", tr)) if not v]
+    if thieu:
+        gc.append("Không nghĩ ra được " + ", ".join(thieu)
+                  + " từ mã này - hãy tự đặt tên khác.")
+    return {"stream_id": goc, "extract": et, "replicat": rep,
+            "trail_prefix": tr, "ckpt_table": ck, "ghi_chu": gc}
 
 
 def kiem_pham_vi(script: str, cho_phep: set[str]) -> None:

@@ -4,7 +4,7 @@
 
 <article>
 <p><small class="muted">
-Hai thao tác dưới đây <strong>tự chạy hết quy trình</strong>: gõ tên bảng, ghi
+Ba thao tác dưới đây <strong>tự chạy hết quy trình</strong>: gõ tên bảng, ghi
 lý do, xác nhận một lần, rồi công cụ đi từng bước từ đầu đến cuối.
 <strong>Mỗi bước vẫn phải đạt mới sang bước sau</strong>; bước nào không đạt
 thì dừng ngay tại đó và nói rõ vì sao.
@@ -100,6 +100,82 @@ hình.
 </article>
 </div>
 
+<article style="border:2px solid var(--danger)">
+  <header><strong class="bad">Tạo luồng MỚI và đưa bảng đầu tiên vào</strong></header>
+
+  <p><small class="bad"><strong>Đây là thao tác nguy hiểm nhất của cả công cụ.</strong>
+  29 bước. Bước 10 <strong>đăng ký một tiến trình đọc redo vào DB NGUỒN
+  production</strong>. Dùng khi bảng chưa thuộc luồng nào và muốn nó có
+  Extract/Replicat riêng.</small></p>
+
+  <p><small class="warn"><strong>Bước 14 ghi thẳng vào <code>conf/app.toml</code></strong>
+  trên server: lưu một bản cũ có đóng dấu thời gian, chỉ <strong>THÊM</strong> khối
+  <code>[streams.&lt;mã&gt;]</code> vào cuối file (không viết lại dòng nào đang có), rồi
+  đọc lại file để đối chiếu &mdash; ba luồng đang chạy phải y nguyên từng giá trị,
+  lệch một chữ thì công cụ trả file về bản cũ và dừng. Không phải khởi động lại.</small></p>
+
+  <p><small class="muted"><strong>Sáu tiến trình, ba trail và ba bảng checkpoint đang
+  chạy là BẤT KHẢ XÂM PHẠM suốt lượt này</strong> &mdash; lớp kiểm đó chạy TRƯỚC danh
+  sách cho phép của phiên, nên kể cả gõ nhầm tên một tiến trình thật thì lệnh vẫn bị
+  từ chối. Lượt này <strong>không dừng, không chạy lại, không sửa tham số</strong> của
+  bất kỳ luồng nào đang có.
+  <br>Cái nó CÓ dùng chung với ba luồng cũ: <strong>bộ nhớ streams pool và tải đọc
+  redo ở DB nguồn</strong> &mdash; bước 1 đo cả hai đầu và chặn nếu không đủ.
+  <br><strong>Hỏng ở bất kỳ bước nào thì công cụ TỰ DỌN SẠCH ngay</strong> (theo yêu
+  cầu): dừng tiến trình, xoá Replicat, xoá bảng checkpoint, xoá Extract, bỏ đăng ký ở
+  DB nguồn, gỡ khối <code>[streams]</code> khỏi <code>conf/app.toml</code>, xoá file
+  tham số và trail. Nó <strong>không</strong> xoá bảng đích đã tạo, <strong>không</strong>
+  xoá dữ liệu đã nạp và <strong>không</strong> tắt TRANDATA.</small></p>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <input type="hidden" name="op" value="AUTO_NEW_STREAM">
+    <div class="grid">
+      <label>Tên bảng đầu tiên
+        <input type="text" name="target" required list="ds_moi"
+               placeholder="bảng chưa thuộc luồng nào"
+               style="text-transform:uppercase">
+      </label>
+      <label>Mã luồng trong <code>conf/app.toml</code>
+        <input type="text" name="ns_sid" placeholder="VÍ DỤ: BC2"
+               style="text-transform:uppercase"
+               hx-get="/nhanh/goi-y" hx-target="#ns-ten" hx-swap="innerHTML"
+               hx-trigger="keyup changed delay:400ms, change"
+               hx-include="[name='target'],[name='ns_sid']"
+               hx-vals='js:{ma: document.querySelector("[name=ns_sid]").value,
+                            bang: document.querySelector("[name=target]").value}'>
+      </label>
+    </div>
+    <datalist id="ds_moi">
+      {% for t in moi or [] %}<option value="{{ t.src_table }}">{% endfor %}
+    </datalist>
+
+    {# Bon o ten: dien san bang goi y, nap ngay khi mo trang. #}
+    <div id="ns-ten" hx-get="/nhanh/goi-y" hx-trigger="load" hx-swap="innerHTML">
+      <p><small class="muted">đang lấy gợi ý tên...</small></p>
+    </div>
+
+    <label>Mô tả luồng &mdash; hiện trên bảng điều khiển
+      <input type="text" name="ns_ten" placeholder="VÍ DỤ: Báo cáo đợt 2">
+    </label>
+    <label>KEYCOLS &mdash; chỉ nhập nếu bảng KHÔNG có khoá chính thật
+      <input type="text" name="keycols" placeholder="VÍ DỤ: MA_DVI, MA_KENH"
+             style="text-transform:uppercase">
+    </label>
+    <small class="muted">Khác với ô &laquo;thêm bảng&raquo; bên trên: ở luồng mới, cột
+      khoá được <strong>nhúng thẳng vào file tham số</strong> sinh ra ở bước 8 và
+      <strong>không bước nào sửa lại dòng MAP</strong> về sau. Bảng không có khoá chính
+      mà để trống thì lượt chạy dừng ở <strong>bước 3</strong> &mdash; trước khi chạm
+      vào bất cứ thứ gì. Nhập ở đây không bỏ qua kiểm chứng: bước 3 vẫn kiểm tính duy
+      nhất trên dữ liệu thật và đếm NULL từng cột khoá.</small>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="contrast">Chạy tự động &mdash; tạo luồng mới</button>
+  </form>
+  <p><small class="muted">Xác nhận mức L2: phải nhập lại <strong>tên Extract</strong>
+  (không phải tên bảng) &mdash; đó mới là thứ sắp được đăng ký vào DB nguồn. Khung xác
+  nhận hiện <strong>đúng khối</strong> sẽ được ghi vào <code>conf/app.toml</code>.</small></p>
+</article>
+
 <div id="khung"></div>
 
 <article>
@@ -117,6 +193,15 @@ hình.
       <td>Chưa từng được đồng bộ &mdash; phải thêm vào luồng trước.</td></tr>
   <tr><td>Luồng đang có một quy trình khác mở</td>
       <td>Một luồng chỉ một quy trình cùng lúc.</td></tr>
+  <tr><td>Luồng mới: bảng <strong>đã có MAP</strong> hoặc đã gắn luồng</td>
+      <td>Bảng đầu tiên của luồng mới phải chưa thuộc luồng nào.</td></tr>
+  <tr><td>Luồng mới: đang có một <strong>phiên tạo luồng khác</strong> mở</td>
+      <td>Tối đa MỘT phiên loại này cùng lúc &mdash; nó chạm vào DB nguồn production.</td></tr>
+  <tr><td>Luồng mới: tên trùng <strong>6 tiến trình · 3 trail · 3 bảng checkpoint</strong></td>
+      <td>Đối tượng đang chạy là bất khả xâm phạm; lớp kiểm này chạy trước cả danh sách
+          cho phép của phiên.</td></tr>
+  <tr><td>Luồng mới: mã luồng hoặc tên tiến trình <strong>đã có trong <code>conf/app.toml</code></strong></td>
+      <td>Ghi đè cấu hình của một luồng khác là mất luồng đó.</td></tr>
   <tr><td>Bảng <strong>không có khoá chính</strong></td>
       <td>Dừng ở bước xác nhận cột khoá và đợi người nhập. Chọn khoá là phán
         đoán nghiệp vụ, không phải việc của máy.</td></tr>

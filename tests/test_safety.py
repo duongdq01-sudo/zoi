@@ -317,3 +317,28 @@ def pending_tu_don_khi_het_han():
     assert g.pending_of(p.token) is not None
     g._pending[p.token].expires = time.monotonic() - 1
     assert g.pending_of(p.token) is None, "pending het han phai bi don"
+
+
+# ============================== LUONG_MOI: go tay TEN EXTRACT (2026-10-15)
+@test
+def luong_moi_go_tay_TEN_EXTRACT_chu_khong_phai_ten_bang():
+    """Doi tuong nguy hiem la tien trinh doc redo sap dang ky vao DB nguon.
+
+    Go ten bang la go nham thu khong nguy hiem - phai bi tu choi.
+    """
+    g, _ = make()
+    p = g.arm(ADMIN, action="AUTO_NEW_STREAM", target="HT_MA_KENH_BAN",
+              level=L2, reason="tao luong moi cho bang HT_MA_KENH_BAN",
+              preflight_ok=True, extra={"go_tay": "ETBC2"})
+    try:
+        g.fire(p.token, ADMIN, typed="HT_MA_KENH_BAN", preflight_now=True)
+    except Denied as e:
+        assert "ETBC2" in str(e), str(e)
+    else:
+        raise AssertionError("go ten bang ma van ban co duoc")
+
+    p2 = g.arm(ADMIN, action="AUTO_NEW_STREAM", target="HT_MA_KENH_BAN",
+               level=L2, reason="tao luong moi cho bang HT_MA_KENH_BAN",
+               preflight_ok=True, extra={"go_tay": "ETBC2"})
+    # khong phan biet hoa thuong - go dung ten la duoc
+    assert g.fire(p2.token, ADMIN, typed="etbc2", preflight_now=True)
