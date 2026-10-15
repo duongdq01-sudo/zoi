@@ -64,7 +64,16 @@ def kieu_cot(c: dict) -> str:
             raise DdlError(f'Cột "{c["column_name"]}" {t} không đọc được độ dài')
         # CHAR_USED = 'C' nghia la khai bao theo KY TU, khong theo byte. Mang
         # sai don vi thi cot bi ngan hon nguon va ORA-12899 luc apply.
-        dv = " CHAR" if (c.get("char_used") or "B") == "C" else ""
+        #
+        # NHUNG NVARCHAR2/NCHAR thi KHONG duoc them qualifier: do dai cua
+        # kieu N* LUON tinh theo ky tu, va Oracle tu choi cu phap
+        # `NVARCHAR2(200 CHAR)` bang dung ORA-00907 missing right
+        # parenthesis. Ma dba_tab_columns lai tra char_used='C' cho moi cot
+        # N*, nen cho chung di chung duong voi VARCHAR2 la sinh ra DDL
+        # khong chay duoc. Da gap that 2026-10-15: buoc 3 cua quy trinh
+        # them bang HT_MA_KENH_BAN chet voi ORA-00907.
+        dv = "" if t.startswith("N") else (
+            " CHAR" if (c.get("char_used") or "B") == "C" else "")
         return f"{t}({int(n)}{dv})"
     if t == "NUMBER":
         p, s = c.get("data_precision"), c.get("data_scale")
