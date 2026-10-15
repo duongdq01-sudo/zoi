@@ -4,9 +4,9 @@
 # Chay tu may Windows (Git Bash):   bash tools/trien_khai.sh
 #
 # VI SAO CO FILE NAY, khong goi thang deploy.sh:
-#   1. GO MAT KHAU MOT LAN. `deploy.sh` mo khoang 10 ket noi ssh/scp rieng
-#      le, moi cai hoi mat khau mot lan. O day bat ControlMaster truoc, moi
-#      ket noi sau di chung mot duong - go mot lan cho ca luot.
+#   1. KHONG MAT KHAU. Dung khoa `id_ed25519_ggshell` nam trong ssh-agent
+#      dung chung; BatchMode=yes de thieu khoa thi bao loi ngay chu khong
+#      treo o dau nhac mat khau.
 #   2. BACKUP DB TRUOC khi khoi dong lai. Ban 2026-10-15 co mot migration
 #      dung lai bang `wizard_run` (them LUONG_MOI vao rang buoc CHECK).
 #      Migration tu luu `.premigrate`, nhung mot ban backup day du truoc do
@@ -18,12 +18,17 @@ H=${1:-oracle@172.16.33.90}
 D=/u01/app/ggadmin
 cd "$(dirname "$0")/.." || exit 1
 
-CM=~/.ssh/cm-trienkhai-$$
-SSH="ssh -o ControlMaster=auto -o ControlPath=$CM -o ControlPersist=600"
-don() { $SSH -O exit "$H" 2>/dev/null; rm -f "$CM"; }
-trap don EXIT
+SSH="ssh -o BatchMode=yes"
 
-echo "=== 1/5  Mo ket noi dung chung (go mat khau MOT lan) ==="
+echo "=== 1/5  Kiem khoa va ket noi ==="
+# Khoa deploy nam trong ssh-agent dung chung (~/.ssh/agent.env, xem
+# ~/.bashrc). Phien khong phai cua so Git Bash thi phai tu nap file env.
+[ -f ~/.ssh/agent.env ] && . ~/.ssh/agent.env >/dev/null 2>&1
+if ! ssh-add -l >/dev/null 2>&1; then
+  echo "ssh-agent CHUA co khoa nao. Mo Git Bash va chay:"
+  echo "    ssh-add ~/.ssh/id_ed25519_ggshell"
+  exit 1
+fi
 $SSH "$H" "echo ket noi OK: \$(hostname)" || { echo "khong ket noi duoc"; exit 1; }
 
 echo
@@ -33,9 +38,10 @@ $SSH "$H" "cd $D && ./venv/bin/python3 tools/backup_db.py" || {
 
 echo
 echo "=== 3/5  Day code (deploy.sh tu chay lint + compile + test truoc) ==="
-# deploy.sh doc hai bien SSH/SCP (mac dinh la `ssh`/`scp`) - truyen ban co
-# ControlPath vao de ca 10 ket noi cua no di chung mot duong da mo o tren.
-SSH="$SSH" SCP="scp -o ControlMaster=auto -o ControlPath=$CM -o ControlPersist=600"   bash tools/deploy.sh "$H" || {
+# deploy.sh doc hai bien SSH/SCP (mac dinh la `ssh`/`scp`). Truyen ban
+# BatchMode vao: thieu khoa thi no PHAI bao loi ngay, khong duoc treo o
+# dau nhac mat khau ma khong ai thay.
+SSH="$SSH" SCP="scp -o BatchMode=yes" bash tools/deploy.sh "$H" || {
   echo "DEPLOY KHONG XONG -> khong khoi dong lai."; exit 1; }
 
 echo
