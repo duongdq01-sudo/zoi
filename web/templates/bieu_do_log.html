@@ -1,0 +1,359 @@
+{% extends "base.html" %}{% block title %}Biểu đồ log &mdash; ggadmin{% endblock %}
+{% block mo_ta_trang %}<div class="sub">Dung lượng mọi loại log trên server, tốc độ tăng và đĩa còn chứa được bao lâu</div>{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="/static/vendor/uplot.min.css">
+
+{# ---- tien ich hien thi ---- #}
+{% macro ngay(d) -%}
+  {%- if d is none -%}<span class="muted">không tăng</span>
+  {%- elif d >= 3650 -%}trên 10 năm
+  {%- elif d >= 60 -%}~{{ (d / 30)|round(0)|int }} tháng
+  {%- elif d >= 2 -%}{{ d|round(0)|int }} ngày
+  {%- else -%}{{ (d * 24)|round(0)|int }} giờ
+  {%- endif -%}
+{%- endmacro %}
+{% macro toc_do(v) -%}
+  {%- if v is none -%}<span class="muted">chưa đủ số liệu</span>
+  {%- elif v < 0 -%}&minus;{{ (0 - v)|bytes }}/ngày
+  {%- else -%}+{{ v|bytes }}/ngày
+  {%- endif -%}
+{%- endmacro %}
+
+{% set t = bc.tong %}
+{% set goc = (bc.dia | selectattr('mount', 'equalto', '/') | list | first) if bc.dia else none %}
+
+<p>
+  {% for h in khoang %}
+  <a href="/bieu-do-log?hours={{ h }}" role="button"
+     class="{{ '' if hours == h else 'outline' }}">
+    {% if h == 24 %}1 ngày{% else %}{{ (h / 24)|int }} ngày{% endif %}
+  </a>
+  {% endfor %}
+</p>
+
+{# ---- hang KPI ---- #}
+{% set ic_log %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>{% endset %}
+{% set ic_len %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16l5-4 4 2 7-7"/><path d="M15 7h5v5"/></svg>{% endset %}
+{% set ic_dia %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>{% endset %}
+{% set ic_gio %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>{% endset %}
+
+<div class="kpi-hang">
+  <div class="kpi">
+    <div class="nhan">Tổng dung lượng log<span class="bg">{{ ic_log }}</span></div>
+    <div class="so">{{ t.bytes|bytes }}</div>
+    <div class="duoi">{{ t.files|songuyen }} file &middot; {{ bc.nhom|length }} nhóm</div>
+  </div>
+
+  <div class="kpi {{ 'nguy' if bc.so_vuot else 'tot' }}">
+    <div class="nhan">Vượt {{ bc.nguong_pct|so(0) }}% hạn mức<span class="bg">{{ ic_log }}</span></div>
+    <div class="so">{{ bc.so_vuot }}<span class="dv">/ {{ bc.nhom|length }} nhóm</span></div>
+    <div class="duoi {{ 'nguy' if bc.so_vuot else 'tot' }}">
+      {% if bc.so_vuot %}▼ {{ bc.nhom | selectattr('vuot') | map(attribute='ten') | join(', ') }}
+      {% else %}▲ mọi nhóm dưới ngưỡng{% endif %}
+    </div>
+  </div>
+
+  <div class="kpi">
+    <div class="nhan">Log phát sinh<span class="bg">{{ ic_len }}</span></div>
+    <div class="so">{% if t.phat_sinh_ngay is none %}&ndash;{% else %}{{ t.phat_sinh_ngay|bytes }}{% endif %}<span class="dv">/ngày</span></div>
+    <div class="duoi">{% if t.phat_sinh is none %}chưa đủ số liệu{% else %}{{ t.phat_sinh|bytes }} trong khoảng đang xem{% endif %}</div>
+  </div>
+
+  {% set rn = t.rong_ngay %}
+  <div class="kpi {{ '' if rn is none else ('tot' if rn <= 0 else 'canh') }}">
+    <div class="nhan">Log tăng ròng<span class="bg">{{ ic_len }}</span></div>
+    <div class="so">{% if rn is none %}&ndash;{% else %}{{ '−' if rn < 0 else '+' }}{{ (rn|abs)|bytes }}{% endif %}<span class="dv">/ngày</span></div>
+    <div class="duoi {{ '' if rn is none else ('tot' if rn <= 0 else 'canh') }}">
+      {% if rn is none %}chưa đủ số liệu
+      {% elif rn <= 0 %}▲ không phình &mdash; đang được dọn
+      {% else %}▼ đang chiếm thêm chỗ trên đĩa{% endif %}
+    </div>
+  </div>
+
+  {% if goc %}
+  {% set gb = goc.avail / 1073741824 %}
+  <div class="kpi {{ 'nguy' if gb < 25 else ('canh' if gb < 60 else 'tot') }}">
+    <div class="nhan">Đĩa / còn trống<span class="bg">{{ ic_dia }}</span></div>
+    <div class="so">{{ goc.avail|bytes }}</div>
+    <div class="duoi">đã dùng {{ goc.used_pct|so }}% của {{ goc.total|bytes }}</div>
+  </div>
+
+  {% set nd = goc.ngay_den_chi_doc %}
+  <div class="kpi {{ 'tot' if nd is none or nd > 180 else ('canh' if nd > 30 else 'nguy') }}">
+    <div class="nhan">Tới ngưỡng chỉ đọc 25 GB<span class="bg">{{ ic_gio }}</span></div>
+    <div class="so">{{ ngay(nd) }}</div>
+    <div class="duoi {{ 'tot' if nd is none or nd > 180 else ('canh' if nd > 30 else 'nguy') }}">
+      {% if goc.thuong_ngay is none %}chưa đủ số liệu đĩa
+      {% else %}đĩa thường tăng {{ toc_do(goc.thuong_ngay) }}{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<article>
+  <header><strong>Dung lượng log theo nhóm</strong>
+    <small class="muted">&mdash; các lớp chồng lên nhau, mép trên cùng là tổng</small></header>
+  <div id="bd-nhom" style="min-height:20rem"></div>
+  <div id="bd-nhom-info"><small class="muted">đang tải...</small></div>
+</article>
+
+<article>
+  <header><strong>Khả năng chứa của đĩa</strong>
+    <small class="muted">&mdash; đã dùng, ngưỡng chỉ đọc, dung lượng đĩa và đường dự báo (nét đứt)</small></header>
+  <div id="bd-dia" style="min-height:20rem"></div>
+  <div id="bd-dia-info"><small class="muted">đang tải...</small></div>
+  {% for d in bc.dia %}
+  <div class="kv" style="margin-top:.6rem">
+    <b>Đĩa {{ d.mount }}</b>
+    <span>{{ d.used|bytes }} / {{ d.total|bytes }} ({{ d.used_pct|so }}%),
+      log chiếm {{ d.log_bytes|bytes }}</span>
+    <b>Tăng thường ngày</b>
+    <span>{{ toc_do(d.thuong_ngay) }} <small class="muted">(trung vị mức tăng từng ngày &mdash; dùng để dự báo)</small></span>
+    <b>Trung bình cả khoảng</b>
+    <span>{{ toc_do(d.doc_ngay) }} <small class="muted">(đường thẳng qua mọi điểm đo, tính cả đợt đột biến)</small></span>
+    {% if d.dot_bien %}
+    <b>Ngày tăng đột biến</b>
+    <span class="warn">{% for nd_, v in d.dot_bien %}{{ nd_[8:10] }}/{{ nd_[5:7] }}: +{{ v|bytes }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+      <small class="muted">&mdash; thường là nạp dữ liệu / tăng datafile, không phải log</small></span>
+    {% endif %}
+    <b>Đầy đĩa sau</b>
+    <span>{{ ngay(d.ngay_den_day) }}
+      {% if d.ngay_den_chi_doc is not none %} &middot; tới ngưỡng chỉ đọc sau <strong>{{ ngay(d.ngay_den_chi_doc) }}</strong>
+        {% if d.ngay_den_chi_doc_tb is not none %}<small class="muted">(nếu tăng như trung bình cả khoảng: {{ ngay(d.ngay_den_chi_doc_tb) }})</small>{% endif %}
+      {% endif %}</span>
+    <b>Nếu chỉ có log tăng</b>
+    <span>đầy đĩa sau {{ ngay(d.ngay_den_day_chi_log) }}</span>
+  </div>
+  {% endfor %}
+</article>
+
+<article>
+  <header><strong>Chi tiết từng nhóm log</strong>
+    <small class="muted">&mdash; khoảng đang xem: {% if hours == 24 %}1 ngày{% else %}{{ (hours / 24)|int }} ngày{% endif %}</small></header>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr>
+      <th style="text-align:right">STT</th>
+      <th>Nhóm</th><th>Loại</th>
+      <th style="text-align:right">Số file</th>
+      <th style="text-align:right">Dung lượng</th>
+      <th style="text-align:right">Hạn mức</th>
+      <th style="min-width:9rem">Đã dùng / hạn mức</th>
+      <th style="text-align:right">Tỷ trọng</th>
+      <th style="text-align:right">Phát sinh</th>
+      <th style="text-align:right">Tăng ròng</th>
+      <th style="text-align:right">Một mình làm đầy đĩa sau</th>
+      <th style="min-width:16rem">Xoá được không</th>
+    </tr></thead>
+    <tbody>
+    {% for n in bc.nhom | sort(attribute='bytes', reverse=True) %}
+    <tr>
+      <td style="text-align:right">{{ loop.index }}</td>
+      <td><strong>{{ n.ten }}</strong><br>
+        <small class="muted">{% for p in n.duong %}<code>{{ p }}</code>{% if not loop.last %} {% endif %}{% endfor %}</small></td>
+      <td>{{ n.loai }}</td>
+      <td style="text-align:right">{{ n.files|songuyen }}</td>
+      {% set mau = 'var(--danger)' if n.vuot else 'var(--success)' %}
+      <td style="text-align:right" class="{{ 'bad' if n.vuot else 'ok' }}">{{ n.bytes|bytes }}</td>
+      <td style="text-align:right">{{ n.tran|bytes }}</td>
+      <td>
+        {# vach dung o vi tri nguong de nhin ra con cach nguong bao xa #}
+        <div style="position:relative;background:var(--slate-100);border-radius:3px;height:.6rem">
+          <div style="background:{{ mau }};height:100%;border-radius:3px;width:{{ '%.1f'|format([n.pct_tran, 100]|min) }}%"></div>
+          <div style="position:absolute;top:-2px;bottom:-2px;left:{{ '%.0f'|format(bc.nguong_pct) }}%;border-left:2px solid var(--slate-600)" title="ngưỡng {{ bc.nguong_pct|so(0) }}%"></div>
+        </div>
+        <small class="{{ 'bad' if n.vuot else 'ok' }}">{{ n.pct_tran|so }}%
+          {% if n.vuot %}&mdash; vượt ngưỡng{% endif %}</small>
+      </td>
+      <td style="text-align:right">{{ n.ty_le|so }}%</td>
+      <td style="text-align:right">{{ toc_do(n.phat_sinh_ngay) }}</td>
+      <td style="text-align:right" class="{{ 'warn' if n.rong_ngay and n.rong_ngay > 0 else '' }}">{{ toc_do(n.rong_ngay) }}</td>
+      <td style="text-align:right">{{ ngay(n.ngay_lam_day) }}</td>
+      <td>
+        {% if n.xoa == 'duoc' %}<span class="pill ok">Xoá được</span>
+        {% elif n.xoa == 'dieu_kien' %}<span class="pill warn">Có điều kiện</span>
+        {% else %}<span class="pill bad">Không xoá</span>{% endif %}
+        <br><small class="muted">{{ n.xoa_ghi_chu }}</small>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p><small class="muted">
+    Đo {% if bc.do_luc %}lần gần nhất lúc {{ bc.do_luc|hhmm }}, {% endif %}5 phút một lần &middot;
+    nguồn đồ thị: {{ bc.nguon }}.
+  </small></p>
+</article>
+
+<article>
+  <header><strong>Cách đọc</strong></header>
+  <ul>
+    <li><strong>Phát sinh</strong> = tổng các lần log <em>lớn lên</em> giữa hai lần đo liên tiếp, bỏ qua lần nhỏ đi
+      (purge trail, xoay vòng <code>ggserr.log</code>). Cho biết hệ thống ghi ra bao nhiêu log. Là số xấp xỉ
+      dưới: trong 5 phút vừa ghi vừa purge thì phần bù trừ nhau không thấy được.</li>
+    <li><strong>Tăng ròng</strong> = cuối khoảng trừ đầu khoảng. Đây là con số quyết định đĩa có đầy hay không.
+      Trail GoldenGate purge liên tục nên tăng ròng gần 0 dù phát sinh có thể rất lớn.</li>
+    <li><strong>Hạn mức</strong>: mỗi nhóm log có một hạn mức riêng. Dùng quá <strong>{{ bc.nguong_pct|so(0) }}%</strong>
+      hạn mức thì tô <span class="bad">đỏ</span> &mdash; nên dọn hoặc xem lại vì sao phình; dưới ngưỡng tô
+      <span class="ok">xanh</span>. Sửa hạn mức/ngưỡng trong <code>conf/app.toml</code>, khối <code>[log_tran]</code>
+      (vd <code>nguong_pct = 50</code>, <code>gg_trail = 5</code> &mdash; đơn vị GB, khoá là mã nhóm), rồi khởi động lại công cụ.</li>
+    <li><strong>Đầy đĩa sau</strong> dựa vào tốc độ tăng <em>thường ngày</em> của toàn bộ đĩa (không chỉ log): trung vị
+      mức tăng từng ngày, nên một ngày nạp dữ liệu lớn (vd 23/10 tăng 49 GB vì nạp PMNV3) không làm dự báo báo động sai.
+      Khoảng 1 ngày chưa đủ 3 ngày tròn thì dùng đường thẳng qua các điểm đo. <strong>Ngưỡng chỉ đọc 25 GB</strong> là mốc công cụ tự tắt mọi thao tác ghi &mdash;
+      thực tế phải dọn trước mốc này.</li>
+    <li><strong>Một mình làm đầy đĩa sau</strong>: nếu riêng nhóm đó cứ tăng ròng như hiện tại thì bao lâu hết chỗ trống.
+      Nhóm có số nhỏ nhất là nhóm cần để ý nhất.</li>
+    <li><strong>Xoá được không</strong>: <span class="pill ok">Xoá được</span> = log chỉ để chẩn đoán, xoá không ảnh
+      hưởng hệ thống; <span class="pill warn">Có điều kiện</span> = có file xoá được, có file đang dùng &mdash; đọc ghi chú
+      để chọn đúng file; <span class="pill bad">Không xoá</span> = xoá tay làm hỏng hệ thống/mất dữ liệu, hoặc không thuộc
+      quyền user <code>oracle</code>. Đây là hướng dẫn, công cụ không tự xoá.</li>
+    <li>Công cụ chỉ <em>đọc</em> kích thước file, không xoá hay nén gì. Máy này DB chạy NOARCHIVELOG nên không có
+      archive log; redo log cố định 3 &times; 200 MB nên không đưa vào.</li>
+  </ul>
+</article>
+
+<script src="/static/vendor/uplot.iife.min.js"></script>
+<script>
+// Cung bang mau voi trang Lich su.
+const MAU = ["#1E88E5","#e74c3c","#26a65b","#e67e22","#9b59b6",
+             "#16a085","#f1c40f","#7f8c8d","#2c3e50","#d35400","#2980b9"];
+
+function bytesVN(n) {
+  if (n == null) return "-";
+  const u = ["B","KB","MB","GB","TB"];
+  let i = 0, v = Math.abs(n);
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  const s = (i === 0 ? v.toFixed(0) : v.toFixed(1)).replace(".", ",");
+  return (n < 0 ? "−" : "") + s + " " + u[i];
+}
+
+function mauTrong(hex, a) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16),
+        b = parseInt(hex.slice(5, 7), 16);
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+function info(id, html) { document.getElementById(id).innerHTML = html; }
+
+// ---- Do thi 1: dung luong log CHONG lop theo nhom ----
+// uPlot khong co stacked san: cong don tung lop roi ve tu lop TREN CUNG
+// xuong, moi lop to mau xuong 0 - lop sau phu len lop truoc nen nhin ra
+// tung dai. Chu thich van hien gia tri RIENG cua nhom, khong phai so cong don.
+function veNhom(d) {
+  const el = document.getElementById("bd-nhom");
+  el.innerHTML = "";
+  const nhom = d.nhom.filter(n => n.diem && n.diem.length)
+                     .sort((a, b) => a.bytes - b.bytes);   // nho o duoi
+  if (!nhom.length) {
+    info("bd-nhom-info", "<small class='warn'>Chưa có số liệu đo log trong khoảng này. " +
+         "Công cụ đo 5 phút một lần &mdash; đợi vài lần đo rồi tải lại trang.</small>");
+    return;
+  }
+  const tset = new Set();
+  nhom.forEach(n => n.diem.forEach(p => tset.add(p[0])));
+  const xs = Array.from(tset).sort((a, b) => a - b);
+  const idx = new Map(xs.map((t, i) => [t, i]));
+  // gia tri rieng tung nhom, lap cho trong bang gia tri lien truoc
+  const rieng = nhom.map(n => {
+    const col = new Array(xs.length).fill(null);
+    n.diem.forEach(p => { col[idx.get(p[0])] = p[1]; });
+    let prev = null;
+    for (let i = 0; i < col.length; i++) { if (col[i] == null) col[i] = prev; else prev = col[i]; }
+    return col;
+  });
+  const don = [];
+  let acc = new Array(xs.length).fill(0);
+  rieng.forEach(col => {
+    acc = acc.map((v, i) => v + (col[i] || 0));
+    don.push(acc.slice());
+  });
+  // ve tu tren xuong: dao thu tu
+  const thuTu = nhom.map((_, i) => i).reverse();
+  const data = [xs.map(t => t / 1000)].concat(thuTu.map(i => don[i]));
+  const sers = [{}].concat(thuTu.map(i => {
+    const m = MAU[i % MAU.length];
+    return {
+      label: nhom[i].ten, stroke: m, width: 1.2, fill: mauTrong(m, 0.55),
+      value: (u, v, si, di) => di == null ? "-" : bytesVN(rieng[i][di]),
+    };
+  }));
+  new uPlot({
+    width: el.clientWidth || 900, height: 320,
+    scales: { x: { time: true } },
+    axes: [{}, { values: (u, vals) => vals.map(bytesVN), size: 70 }],
+    series: sers,
+    legend: { live: true },
+    cursor: { points: { show: false } },
+  }, data, el);
+  info("bd-nhom-info", "<small class='muted'>" + nhom.length + " nhóm, " + xs.length +
+       " mốc đo &mdash; nguồn: " + d.nguon + ". Rê chuột để xem dung lượng riêng của từng nhóm.</small>");
+}
+
+// ---- Do thi 2: kha nang chua cua dia / ----
+function veDia(d) {
+  const el = document.getElementById("bd-dia");
+  el.innerHTML = "";
+  const dia = (d.dia || []).find(x => x.mount === "/") || (d.dia || [])[0];
+  if (!dia || !dia.diem || dia.diem.length < 2) {
+    info("bd-dia-info", "<small class='warn'>Chưa đủ số liệu dung lượng đĩa trong khoảng này.</small>");
+    return;
+  }
+  const GB = 1073741824;
+  const xs = dia.diem.map(p => p[0] / 1000);
+  const used = dia.diem.map(p => p[1] / GB);
+  // Du bao: noi tiep tu diem cuoi theo do doc, ra phia truoc bang chinh do
+  // dai khoang dang xem (toi thieu 7 ngay), dung lai khi cham dung luong dia.
+  const tCuoi = xs[xs.length - 1];
+  const vCuoi = used[used.length - 1];
+  const tong = dia.total / GB;
+  const nguong = (dia.total - dia.nguong_chi_doc) / GB;
+  // du bao theo toc do THUONG NGAY, khong theo trung binh (bi dot bien keo lech)
+  const doc = dia.thuong_ngay ? dia.thuong_ngay / GB : 0;   // GB/ngay
+  const tamXa = Math.max(7, d.hours / 24) * 86400;
+  const buoc = 24;
+  const xP = [], yP = [];
+  for (let k = 1; k <= buoc; k++) {
+    const t = tCuoi + tamXa * k / buoc;
+    const v = vCuoi + doc * (t - tCuoi) / 86400;
+    xP.push(t); yP.push(Math.min(v, tong));
+  }
+  const X = xs.concat(xP);
+  const pad = new Array(xP.length).fill(null);
+  const duBao = new Array(xs.length - 1).fill(null).concat([vCuoi]).concat(yP);
+  const data = [
+    X,
+    used.concat(pad),
+    duBao,
+    X.map(() => nguong),
+    X.map(() => tong),
+  ];
+  const gbVN = v => v == null ? "-" : v.toFixed(1).replace(".", ",") + " GB";
+  new uPlot({
+    width: el.clientWidth || 900, height: 320,
+    scales: { x: { time: true }, y: { range: (u, mn, mx) => [0, Math.max(tong * 1.04, mx)] } },
+    axes: [{}, { label: "GB", values: (u, vals) => vals.map(v => v.toFixed(0)) }],
+    series: [
+      {},
+      { label: "Đã dùng", stroke: "#1E88E5", width: 1.8, fill: "rgba(30,136,229,.12)", value: (u, v) => gbVN(v) },
+      { label: "Dự báo", stroke: "#1E88E5", width: 1.5, dash: [6, 5], value: (u, v) => gbVN(v) },
+      { label: "Ngưỡng chỉ đọc", stroke: "#e67e22", width: 1.4, dash: [2, 4], value: (u, v) => gbVN(v) },
+      { label: "Dung lượng đĩa", stroke: "#e74c3c", width: 1.4, value: (u, v) => gbVN(v) },
+    ],
+    legend: { live: true },
+  }, data, el);
+  const tocDo = dia.thuong_ngay == null ? "chưa đủ số liệu"
+              : (dia.thuong_ngay >= 0 ? "+" : "") + bytesVN(dia.thuong_ngay) + "/ngày";
+  info("bd-dia-info", "<small class='muted'>Đĩa " + dia.mount + " &mdash; thường tăng " + tocDo +
+       " &mdash; đường dự báo kéo dài " + Math.round(tamXa / 86400) + " ngày tới.</small>");
+}
+
+fetch("/api/bieu-do-log?hours={{ hours }}")
+  .then(r => r.json())
+  .then(d => { if (d.loi) throw new Error(d.loi); veNhom(d); veDia(d); })
+  .catch(e => {
+    info("bd-nhom-info", "<small class='bad'>Không tải được số liệu: " + e.message + "</small>");
+    info("bd-dia-info", "");
+  });
+</script>
+{% endblock %}

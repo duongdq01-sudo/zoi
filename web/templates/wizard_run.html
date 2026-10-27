@@ -128,7 +128,7 @@
   <pre class="diff">{{ xt }}</pre>
   {% endif %}
 
-  <form hx-post="/wizard/{{ run.id }}/arm" hx-target="#khung" hx-swap="innerHTML">
+  <form hx-post="/wizard/{{ run.id }}/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
     {% if dn.name == 'KIEM_TEN' %}
     <div class="grid">
       <label>Tên Extract mới
@@ -198,7 +198,7 @@
     <code>DELETE EXTRACT</code> mà quên nó thì để lại tiến trình đọc redo
     <strong>mồ côi</strong> ở DB nguồn, vẫn giữ archive log và đọc redo vô ích
     <strong>mãi mãi</strong>.</small></p>
-  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
     <input type="hidden" name="op" value="WIZARD_ROLLBACK">
     <input type="hidden" name="target" value="{{ run.id }}">
     <input type="text" name="reason" required minlength="10"

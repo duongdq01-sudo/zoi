@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import history, registry
+from . import history, logsize, registry
 from .adapters import gg, osfs
 
 log = logging.getLogger("ggadmin.collector")
@@ -74,6 +74,9 @@ class Collector:
         self._pending: dict[tuple[str, str], int] = {}
         self._tick_n = 0
         self._last_rollup = 0
+        # Lan do log gan nhat (Bieu do log). Giu RIENG ngoai Snapshot vi chi
+        # do moi logsize.DO_MOI_N_TICK tick, khong phai moi tick.
+        self.log_do: dict = {}
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name="collector")
@@ -120,7 +123,7 @@ class Collector:
             s.errors.append(f"filesystem: {e}")
 
         # Oracle: moi muc bat loi rieng de mot cai hong khong lam mu het
-        reps = [v["replicat"] for v in self.cfg.streams.values()]
+        reps = [(v["replicat"], v.get("ckpt_table")) for v in self.cfg.streams.values()]
         for name, coro in (
             ("capture", self.ora.capture_status()),
             ("apply", self.ora.apply_status()),
@@ -145,6 +148,17 @@ class Collector:
                 s.recon = registry.reconcile(self.con)
         except Exception as e:
             s.errors.append(f"registry: {str(e).splitlines()[0]}")
+
+        # Dung luong log (trang Bieu do log): 5 phut mot lan la du, log tang
+        # theo gio/ngay chu khong theo giay.
+        if self._tick_n == 1 or self._tick_n % logsize.DO_MOI_N_TICK == 0:
+            try:
+                self.log_do = await logsize.a_do(self.cfg)
+                self.con.executemany(
+                    "INSERT OR REPLACE INTO metric_sample(scope,scope_key,metric,ts,val)"
+                    " VALUES (?,?,?,?,?)", logsize.hang_luu(self.log_do))
+            except Exception as e:
+                s.errors.append(f"dung lượng log: {str(e).splitlines()[0]}")
 
         # Rollup + purge moi gio. THU TU QUAN TRONG: rollup TRUOC roi moi
         # purge - purge truoc se mat du lieu vinh vien.

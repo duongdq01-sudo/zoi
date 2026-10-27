@@ -18,7 +18,7 @@
 #}
 {% macro nut_khoiphuc(luong, gon=false) -%}
 {% if luong %}
-<form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML"
+<form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top"
       style="margin:0">
   <input type="hidden" name="op" value="KHOI_PHUC">
   <input type="hidden" name="target" value="{{ luong }}">

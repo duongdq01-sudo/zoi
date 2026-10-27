@@ -29,6 +29,8 @@ import oracledb
 SCHEMA_SOURCE = "KT_BSH"   # hang so, khong lay tu UI
 SCHEMA_TARGET = "ODS"      # hang so, khong lay tu UI
 DB_LINK = "DBL_PMNV"
+# Cot LOB khong dua vao checksum - xem checksum_expr
+KIEU_LOB = {"CLOB", "NCLOB", "BLOB"}
 
 IDENT = re.compile(r"^[A-Z][A-Z0-9_$#]{0,29}$")
 
@@ -52,6 +54,8 @@ class Ora:
             raise SystemExit(f"Thiếu khối [{cred_name}] trong conf/secrets.ini")
         self._cred = cred
         self._pool: oracledb.ConnectionPool | None = None
+        # replicat -> bang checkpoint da doc duoc (xem replicat_checkpoints)
+        self._ckpt_cache: dict[str, str] = {}
 
     def _ensure(self) -> oracledb.ConnectionPool:
         if self._pool is None:
@@ -122,24 +126,113 @@ class Ora:
             SELECT apply_name, status, error_number, error_message
               FROM dba_apply ORDER BY apply_name""")
 
-    async def replicat_checkpoints(self, replicats: list[str]) -> list[dict[str, Any]]:
-        """Tien do apply THAT, tu checkpoint table OGG_BSH.<R>.
+    async def _tim_ckpt_table(self, replicat: str) -> str | None:
+        """Tim bang checkpoint dang chua dong cua Replicat nay.
+
+        Wizard NEW_STREAM cho go ten bang checkpoint tuy y (mac dinh
+        OGG_BSH.<R> nhung khong bat buoc), nen khong duoc doan ten theo
+        Replicat (luong PMNV2 tung bao ORA-00942 vi doan sai). Quet cac bang
+        co du cot GROUP_NAME/SEQNO/RBA/LOG_CSN (bo bang phu *_LOX) va tim
+        bang co dong group_name = Replicat.
+        """
+        cands = await self.rows("""
+            SELECT owner, table_name FROM dba_tab_columns
+             WHERE column_name IN ('GROUP_NAME','SEQNO','RBA','LOG_CSN')
+               AND table_name NOT LIKE '%\\_LOX' ESCAPE '\\'
+               AND table_name NOT LIKE 'BIN$%'
+             GROUP BY owner, table_name HAVING COUNT(*) = 4
+             ORDER BY CASE owner WHEN 'OGG_BSH' THEN 0 ELSE 1 END, owner, table_name""")
+        for c in cands:
+            ten = f'"{c["owner"]}"."{c["table_name"]}"'
+            try:
+                if await self.one(f"SELECT 1 FROM {ten} WHERE group_name = :g",
+                                  g=replicat):
+                    return ten
+            except oracledb.DatabaseError:
+                continue
+        return None
+
+    async def _giai_thich_942(self, loi: str, ten: str, replicat: str,
+                              khai: str | None) -> str:
+        """ORA-00942 vua la "khong co bang" vua la "khong co quyen".
+
+        Bang checkpoint do wizard tao (`add checkpointtable` bang OGG_BSH)
+        khong tu cap SELECT cho GGADM_RO, nen bang CO nhung doc khong duoc.
+        Da gap that 2026-10-27 voi RPMNV2/RPMNV3/RLOG: thong bao cu bao
+        "khai ckpt_table" lam nguoi doc di sai huong.
+        """
+        if "ORA-00942" not in loi:
+            return loi
+        own, _, tab = ten.replace('"', "").rpartition(".")
+        try:
+            co = await self.one("SELECT 1 FROM dba_tables"
+                                " WHERE owner = UPPER(:o) AND table_name = UPPER(:t)",
+                                o=own or "OGG_BSH", t=tab)
+        except oracledb.DatabaseError:
+            co = None
+        if co:
+            return (f"{loi} - bảng {own.upper()}.{tab.upper()} CÓ nhưng GGADM_RO chưa "
+                    "có quyền SELECT; chạy tools/cs13_grant_ckpt_ro.sql bằng sysdba")
+        if khai:
+            return loi
+        return (f"{loi} - không tìm thấy bảng checkpoint của {replicat}; "
+                "khai `ckpt_table` trong [streams] của app.toml")
+
+    async def replicat_checkpoints(self, replicats: list[tuple[str, str | None]]
+                                   ) -> list[dict[str, Any]]:
+        """Tien do apply THAT, tu checkpoint table cua tung Replicat.
+
+        Moi phan tu la (replicat, ckpt_table|None). ckpt_table lay tu khoa
+        `ckpt_table` trong [streams.X] cua app.toml; khong khai thi thu
+        OGG_BSH.<R>, hong nua thi tu do tim (ket qua nho lai, khong quet
+        catalog moi tick).
 
         seqno/rba phai tien len va KHONG duoc ve 0. Day la bang chung manh
         nhat de biet Replicat dang apply that chu khong chi hien RUNNING.
         """
         out = []
-        for r in replicats:
+        for r, khai in replicats:
             check_ident(r)
+            if r in self._ckpt_cache:
+                ten = self._ckpt_cache[r]
+            elif khai:
+                own, _, tab = khai.strip().upper().rpartition(".")
+                check_ident(tab)
+                if own:
+                    check_ident(own)
+                ten = f'"{own or "OGG_BSH"}"."{tab}"'
+            else:
+                ten = f'ogg_bsh."{r}"'
+            sql = (f"SELECT group_name, seqno, rba, log_bsn, log_csn,"
+                   f" last_update_ts FROM {ten} WHERE group_name = :g")
             try:
-                row = await self.one(
-                    f'SELECT group_name, seqno, rba, log_bsn, log_csn,'
-                    f' last_update_ts FROM ogg_bsh."{r}"')
+                row = await self.one(sql, g=r)
             except oracledb.DatabaseError as e:
-                out.append({"group_name": r, "err": str(e).splitlines()[0]})
-                continue
+                loi = str(e).splitlines()[0]
+                tim = None
+                if "ORA-00942" in loi and not khai:
+                    try:
+                        tim = await self._tim_ckpt_table(r)
+                    except oracledb.DatabaseError:
+                        tim = None
+                if tim is None:
+                    out.append({"group_name": r,
+                                "err": await self._giai_thich_942(loi, ten, r, khai)})
+                    continue
+                ten = tim
+                try:
+                    row = await self.one(
+                        f"SELECT group_name, seqno, rba, log_bsn, log_csn,"
+                        f" last_update_ts FROM {ten} WHERE group_name = :g", g=r)
+                except oracledb.DatabaseError as e2:
+                    out.append({"group_name": r, "err": str(e2).splitlines()[0]})
+                    continue
+            self._ckpt_cache[r] = ten
             if row:
                 out.append(row)
+            else:
+                out.append({"group_name": r,
+                            "err": f"bảng {ten} không có dòng group_name={r}"})
         return out
 
     async def prepared_tables(self) -> int:
@@ -183,15 +276,25 @@ class Ora:
         Chiu duoc bang rong. Phai LUU LAI bieu thuc cung ket qua verify:
         param co DDL INCLUDE MAPPED -> DDL them cot -> bieu thuc doi -> hash
         doi MA KHONG PHAI vi du lieu lech.
+
+        Cot LOB (CLOB/NCLOB/BLOB) BI BO khoi checksum. ORA_HASH tren LOB bam
+        CON TRO LOB chu khong bam noi dung: do that 2026-10-23, cung mot
+        TO_CLOB('abc xyz') cho 631765356 o dich va 1844087694 qua DBL_PMNV
+        -> de lai thi bang LOB nao cung bao lech oan. DBMS_LOB.GETLENGTH /
+        SUBSTR thi khong dung duoc qua DB link (ORA-22992). Cot LOB vi the
+        chi duoc doi chieu qua COUNT(*); cac cot con lai van bam binh thuong.
         """
         t = await self.resolve_target_table(table)
         rows = await self.rows(
-            "SELECT column_name FROM dba_tab_columns"
+            "SELECT column_name, data_type FROM dba_tab_columns"
             " WHERE owner=:o AND table_name=:t ORDER BY column_id",
             o=SCHEMA_TARGET, t=t)
         if not rows:
             raise BadIdentifier(f"Bảng {t} không có cột nào")
-        parts = [f'NVL(ORA_HASH("{r["column_name"]}"),0)' for r in rows]
+        parts = [f'NVL(ORA_HASH("{r["column_name"]}"),0)' for r in rows
+                 if r.get("data_type") not in KIEU_LOB]
+        if not parts:
+            return "0"                    # bang toan LOB: chi so COUNT(*)
         return "||'|'||".join(parts)
 
     async def count_and_hash_target(self, table: str) -> tuple[int, str]:

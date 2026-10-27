@@ -50,7 +50,19 @@ $SSH "$H" "bash $D/tools/run.sh restart" || { echo "RESTART HONG"; exit 1; }
 
 echo
 echo "=== 5/5  Kiem chung ==="
+# App mo cong SAU khi gom so lieu theo gio (lan 2026-10-20 mat vai giay),
+# nen `status` chay ngay sau `start` co the bao "healthz khong tra loi" cho
+# mot app hoan toan binh thuong. Cho den khi healthz tra loi, toi da 30s.
+for i in $(seq 1 15); do
+  $SSH "$H" "curl -s -m 3 -o /dev/null http://127.0.0.1:8099/healthz" && break
+  sleep 2
+done
+# `cd $D` NGAY DAU khoi kiem chung: khong co no thi `./venv/bin/python3` o
+# duoi tim trong $HOME va bao "No such file or directory" - da hong hai lan
+# (2026-10-15 va 2026-10-20), ca hai lan deu lam mat phan doc rang buoc
+# CHECK(kind) trong khi phan con lai cua deploy van dung.
 $SSH "$H" "
+  cd $D || exit 1
   echo '--- trang thai ---'
   bash $D/tools/run.sh status
   echo '--- ban DB truoc nang cap (neu migration da chay) ---'

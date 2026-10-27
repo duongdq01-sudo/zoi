@@ -7,7 +7,7 @@ sua tay file sinh ra. Day la mot buoc ngoai luong, va la ly do `ADD_TABLE`
 chua bao gio chay duoc tron mot lan.
 
 PHAM VI CO Y HEP: module nay chi xu ly cac kieu du lieu THONG THUONG. Gap
-kieu can phan xet (LOB, LONG, XMLTYPE, kieu tu dinh nghia, bang partition)
+kieu can phan xet (LONG, XMLTYPE, kieu tu dinh nghia, bang partition)
 thi NO TU CHOI va chi ra `gen_target_ddl.py`. Sinh bua mot DDL gan dung cho
 mot bang 256 trieu dong roi phat hien sai kieu sau khi nap la hong nang hon
 han viec tu choi tu dau.
@@ -43,8 +43,12 @@ TS_INDEX = "BSH_INDEX"
 # Kieu xu ly duoc. Ngoai danh sach nay thi tu choi.
 KIEU_DON = {"DATE", "FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE", "ROWID",
             "CLOB", "BLOB", "NCLOB", "LONG", "LONG RAW", "XMLTYPE"}
-KIEU_TU_CHOI = {"CLOB", "BLOB", "NCLOB", "LONG", "LONG RAW", "XMLTYPE",
-                "BFILE", "ROWID", "UROWID"}
+# CLOB/NCLOB/BLOB DA RA KHOI danh sach nay tu 2026-10-23 (lo 6 PMNV3 dung o
+# BH_KENH_CALLBACK_NK): mang kieu sang nguyen ven la du, LOB nam chung
+# tablespace bang. Nap `INSERT ... SELECT * FROM ...@DBL_PMNV` nhan LOB tu
+# xa; verify bo cot LOB khoi checksum (xem ora.checksum_expr).
+# LONG / XMLTYPE / BFILE van phai phan xet nen van tu choi.
+KIEU_TU_CHOI = {"LONG", "LONG RAW", "XMLTYPE", "BFILE", "ROWID", "UROWID"}
 
 
 class DdlError(RuntimeError):
@@ -137,18 +141,32 @@ def sinh_ddl(*, tgt_owner: str, tgt_table: str, cols: list[dict],
         ]
     else:
         out += ["-- Nguon KHONG co PK -> dich khong co PK. Khoa se khai bang",
-                "-- KEYCOLS o buoc 2 cua wizard.", ""]
+                "-- KEYCOLS o buoc xac nhan cot khoa cua wizard.", ""]
 
     n_idx = 0
+    da_co = {tuple(pk_cols)} if pk_cols else set()
     for x in idx:
-        if (x["uniqueness"] == "UNIQUE"
-                and [c.strip() for c in x["cols"].split(",")] == pk_cols):
+        ds_cot = tuple(c.strip() for c in x["cols"].split(","))
+        if x["uniqueness"] == "UNIQUE" and list(ds_cot) == pk_cols:
             continue                  # PK da tao index nay
         if "FUNCTION" in (x["index_type"] or ""):
             out.append(f"-- BO QUA index function-based {x['index_name']} "
                        f"({x['cols']}): GoldenGate khong dung duoc lam khoa,")
             out.append("-- va bieu thuc cua no can phan xet. Tao tay neu can.")
             continue
+        # DOMAIN = index Oracle Text (CTXSYS.CONTEXT...) hoac spatial. Doi no
+        # thanh B-tree la SAI loai, va con dung ORA-01408 khi da co B-tree
+        # tren cung cot: gap that 2026-10-23 lo 19 PMNV3, BH_XE_GCN_TV co 9
+        # index *_TXT_* kieu CONTEXT, TXT_BXT trung cot voi BH_XE_GCN_TV_BKS.
+        if (x["index_type"] or "") == "DOMAIN":
+            out.append(f"-- BO QUA index DOMAIN {x['index_name']} ({x['cols']}):"
+                       " Oracle Text/spatial, can tham so rieng. Tao tay neu can.")
+            continue
+        if ds_cot in da_co:
+            out.append(f"-- BO QUA index {x['index_name']} ({x['cols']}): da co"
+                       " index tren dung danh sach cot nay (ORA-01408).")
+            continue
+        da_co.add(ds_cot)
         n_idx += 1
         uq = "UNIQUE " if x["uniqueness"] == "UNIQUE" else ""
         cl = ", ".join(chr(34) + c.strip() + chr(34) for c in x["cols"].split(","))
@@ -173,4 +191,64 @@ def sinh_ddl(*, tgt_owner: str, tgt_table: str, cols: list[dict],
             "",
         ]
     out += [f"PROMPT SO_INDEX={n_idx}", "EXIT", ""]
+    return chr(10).join(out)
+
+
+# =====================================================================
+# BANG LOG (2026-10-20): <TEN>_LOG giu MOI thay doi cua bang nguon.
+#
+# Moi INSERT/UPDATE/DELETE o nguon thanh MOT dong INSERT o day (Replicat
+# chay INSERTALLRECORDS). Vi vay, KHAC han bang dich thuong:
+#   - KHONG khoa chinh, KHONG index duy nhat: cung mot khoa se xuat hien
+#     nhieu lan. Mot rang buoc duy nhat o day lam Replicat ABEND ngay lan
+#     thu hai dong do bi sua.
+#   - MOI cot nguon deu cho phep NULL: an toan khi nguon them NOT NULL sau.
+#   - Them 3 cot cua log. Ten co dinh, tranh trung cot nguon (kiem truoc).
+# =====================================================================
+COT_LOG = (
+    ("LOG_TYPE", "VARCHAR2(1)", "I = INSERT, U = UPDATE (anh SAU), D = DELETE (gia tri dong bi xoa)"),
+    ("COMMIT_TS", "TIMESTAMP(6)", "luc giao dich COMMIT o nguon"),
+    ("LOG_TIME", "DATE DEFAULT SYSDATE NOT NULL", "luc dong nay duoc GHI VAO DICH (SYSDATE)"),
+)
+
+
+def sinh_ddl_log(*, tgt_owner: str, tgt_table: str, cols: list[dict], src: str,
+                 grantee: str | None = "GGADM_LOAD") -> str:
+    """Sinh script tao bang LOG: cot nguon (deu NULL) + 3 cot log + grant."""
+    t = check_ident(tgt_table)
+    o = check_ident(tgt_owner)
+    if not cols:
+        raise DdlError("không có cột nào")
+    trung = sorted({c["column_name"] for c in cols} & {c[0] for c in COT_LOG})
+    if trung:
+        raise DdlError(
+            "bảng nguồn đã có cột trùng tên cột log: " + ", ".join(trung)
+            + " - không tạo được bảng log mà không đổi tên cột")
+    dong = [f'  "{c["column_name"]}" {kieu_cot(c)}'
+            for c in sorted(cols, key=lambda x: x["column_id"])]
+    dong += [f'  "{ten}" {kieu}' for ten, kieu, _ in COT_LOG]
+    out: list[str] = [
+        f"-- ggadmin: DDL bang LOG {o}.{t}",
+        f"-- Sinh tu metadata cua {src} luc {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        "--",
+        "-- Moi thay doi o nguon thanh MOT dong o day (INSERTALLRECORDS).",
+        "-- CO Y KHONG co khoa chinh / index duy nhat: cung mot khoa xuat hien",
+        "-- nhieu lan. Moi cot nguon cho phep NULL.",
+    ] + [f"--   {ten:<10} {mo_ta}" for ten, _, mo_ta in COT_LOG] + [
+        "WHENEVER SQLERROR EXIT FAILURE",
+        "",
+        f'CREATE TABLE {o}."{t}" (',
+        ",\n".join(dong),
+        f") TABLESPACE {TS_DATA};",
+        "",
+        "-- Index tra cuu theo thoi gian - KHONG duy nhat.",
+        f'CREATE INDEX {o}."{(t + "_LT")[:30]}" ON {o}."{t}" ("LOG_TIME") '
+        f"TABLESPACE {TS_INDEX};",
+        "",
+    ]
+    if grantee:
+        g = check_ident(grantee)
+        out += [f'GRANT SELECT, INSERT, UPDATE, DELETE ON {o}."{t}" TO {g};',
+                f'GRANT SELECT ON {o}."{t}" TO GGADM_RO;', ""]
+    out += ["PROMPT SO_INDEX=0", "EXIT", ""]
     return chr(10).join(out)

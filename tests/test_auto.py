@@ -59,8 +59,12 @@ def _loi(fn):
 def tu_choi_bang_ngoai_danh_sach_quan_ly():
     """Cong cu khong duoc cham vao bang ngoai pham vi - chot lop 5."""
     c = _con(_khong_co_dong=True)
-    m = _loi(lambda: auto.kiem_dieu_kien(c, "ADD_TABLE", "T1"))
+    # Dong bo lai van doi bang da dang ky. Them bang thi KHONG con doi (yeu
+    # cau 2026-10-20): buoc 1 cua no tu dang ky, kiem bang co that o nguon.
+    m = _loi(lambda: auto.kiem_dieu_kien(c, "RESYNC_TABLE", "T1"))
     assert "không nằm trong danh sách quản lý" in m, m
+    r = auto.kiem_dieu_kien(c, "ADD_TABLE", "T1")
+    assert r["src_table"] == "T1" and r["stream"] is None, r
 
 
 @test
@@ -327,6 +331,44 @@ def _con_lm(**kw):
 def luong_moi_cho_qua_khi_bang_chua_thuoc_luong_nao():
     r = auto.kiem_dieu_kien(_con_lm(), "LUONG_MOI", "HT_MA_KENH_BAN")
     assert r["src_table"] == "HT_MA_KENH_BAN"
+
+
+@test
+def luong_moi_cho_qua_khi_bang_CHUA_dang_ky():
+    """Buoc 2 cua LUONG_MOI tu dang ky bang, nen o day KHONG doi co san dong.
+
+    Bat dang ky truoc la mot VONG KHONG THE DI: o dang ky bang bat chon mot
+    luong DA CO trong conf/app.toml, ma luong cua luot nay chi ton tai tu
+    buoc DANG_KY_CAU_HINH. Chot that nam o buoc 2: bang phai co THAT o nguon.
+    """
+    c = _con_lm()
+    c.execute("DELETE FROM managed_table")
+    r = auto.kiem_dieu_kien(c, "LUONG_MOI", "HT_MA_KVUC")
+    assert r["src_table"] == "HT_MA_KVUC", r
+    assert r["stream"] is None and r["has_map"] == 0, r
+
+
+@test
+def luong_moi_van_kiem_CU_PHAP_ten_bang_khi_chua_dang_ky():
+    """Khong con dong registry de doi chieu -> it nhat phai chan chuoi rac."""
+    c = _con_lm()
+    c.execute("DELETE FROM managed_table")
+    for rac in ("HT_MA_KVUC; DROP TABLE x", "ht ma kvuc", "", "1_BANG"):
+        try:
+            auto.kiem_dieu_kien(c, "LUONG_MOI", rac)
+        except ValueError:
+            continue
+        raise AssertionError(f"nhan ten rac: {rac!r}")
+
+
+@test
+def them_bang_va_dong_bo_lai_VAN_doi_bang_da_dang_ky():
+    """Noi long chi cho LUONG_MOI, khong lan sang cac duong khac."""
+    c = _con_lm()
+    c.execute("DELETE FROM managed_table")
+    for kind in ("RESYNC_TABLE", "GO_BANG"):
+        m = _loi(lambda k=kind: auto.kiem_dieu_kien(c, k, "HT_MA_KVUC"))
+        assert "không nằm trong danh sách quản lý" in m, (kind, m)
 
 
 @test

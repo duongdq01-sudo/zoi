@@ -23,8 +23,11 @@
 
 {# --- bo icon, viewBox 24, fill none, stroke-width 1.8 (design-system 7) --- #}
 {% set i_tongquan %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>{% endset %}
+{% set i_bieudolog %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M4 16l5-4 4 2 7-7"/><path d="M15 7h5v5"/></svg>{% endset %}
 {% set i_bang %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>{% endset %}
+{% set i_tracuu %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>{% endset %}
 {% set i_doichieu %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11l-3-3M20 17H9l3 3"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="17" r="2"/></svg>{% endset %}
+{% set i_luonglog %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>{% endset %}
 {% set i_nhanh %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13h5l-1 8 8-10h-5z"/></svg>{% endset %}
 {% set i_quytrinh %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h10M9 12h10M9 19h10"/><path d="M4 5l1.5 1.5L8 4"/><path d="M4 12l1.5 1.5L8 10.5"/><circle cx="5.5" cy="19" r="1.5"/></svg>{% endset %}
 {% set i_dieukhien %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h7M15 7h5M4 17h3M11 17h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>{% endset %}
@@ -68,12 +71,16 @@
   <nav aria-label="Menu chính">
     <div class="nhom">Theo dõi</div>
     {{ muc('/',         'Tổng quan',  i_tongquan, khop_tuyet_doi=True) }}
+    {{ muc('/bieu-do-log', 'Biểu đồ log', i_bieudolog) }}
     {{ muc('/tables',   'Bảng',       i_bang) }}
+    {{ muc('/tra-cuu',  'Tra cứu bảng', i_tracuu) }}
     {{ muc('/verify',   'Đối chiếu',  i_doichieu) }}
     {{ muc('/history',  'Lịch sử',    i_lichsu) }}
 
     <div class="nhom">Thao tác</div>
     {{ muc('/nhanh',    'Thao tác nhanh', i_nhanh) }}
+    {# khop TUYET DOI: '/log' la tien to cua '/logs' #}
+    {{ muc('/log',      'Luồng log', i_luonglog, khop_tuyet_doi=True) }}
     {{ muc('/wizard',   'Quy trình',  i_quytrinh) }}
     {{ muc('/control',  'Điều khiển', i_dieukhien) }}
     {{ muc('/params',   'Tham số',    i_thamso) }}
@@ -150,6 +157,15 @@
    Cho swap ca response loi: ly do tu choi phai hien ra dung cho no se hien
    neu thanh cong. #}
 <script>
+// Dung cho bo loc trigger cua cac khung tu ve lai (hx-swap="outerHTML"):
+// dang go trong khung thi KHONG ve lai, neu khong chu dang go se mat.
+function ggDangGo(el) {
+  var a = document.activeElement;
+  if (a && el.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+  var o = el.querySelectorAll("input[type=text], textarea");
+  for (var i = 0; i < o.length; i++) { if (o[i].value.trim() !== "") return true; }
+  return false;
+}
 document.body.addEventListener("htmx:beforeSwap", function (e) {
   if (e.detail.xhr && e.detail.xhr.status >= 400) {
     e.detail.shouldSwap = true;

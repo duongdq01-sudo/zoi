@@ -28,10 +28,10 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auto, config, db, history, khoiphuc, registry
+from . import auto, config, db, history, khoiphuc, logsize, registry
 from . import params as paramsmod
 from .adapters import gg, osfs
-from .adapters.ora import Ora
+from .adapters.ora import Ora, check_ident
 from .auth import COOKIE, MAX_AGE, Auth
 from .collector import Collector
 from .control import Control, ControlError
@@ -76,7 +76,7 @@ tudong = auto.TuDong(cfg, con, wizard, pre, auth, lambda o, t: _pf_cua(o, t))
 _phien_mo = con.execute(
     "SELECT created_extract, created_replicat, created_trail_prefix,"
     " created_ckpt_table FROM wizard_run"
-    " WHERE kind IN ('NEW_STREAM','LUONG_MOI') AND state='OPEN'").fetchall()
+    " WHERE kind IN ('NEW_STREAM','LUONG_MOI','LUONG_LOG') AND state='OPEN'").fetchall()
 _mien_tru = {str(x).upper() for r in _phien_mo for x in tuple(r) if x}
 _mien_tru |= {str(r["created_ckpt_table"]).split(".")[-1].upper()
               for r in _phien_mo if r["created_ckpt_table"]}
@@ -429,6 +429,54 @@ async def tables_page(req: Request, stream: str = ""):
                                 ctx(req, rows=rows, stream=stream))
 
 
+@app.get("/tra-cuu", response_class=HTMLResponse)
+async def tra_cuu_page(req: Request, q: str = ""):
+    """Tra cuu mot hoac nhieu bang: dang o luong / Extract / Replicat nao.
+
+    Chi doc (L0). Phan file tham so + SQLite luon co; phan Oracle (bang co
+    o nguon / o ODS, TRANDATA) doc them neu duoc - loi thi bao ro, KHONG
+    lam hong ca trang.
+    """
+    u = current_user(req)
+    if not u:
+        return RedirectResponse("/login", status_code=303)
+    ds, kq, loi_ora, qua_tran = wzmod.tach_ten_bang(q), [], "", False
+    if len(ds) > registry.DANG_KY_TOI_DA:
+        ds, qua_tran = ds[:registry.DANG_KY_TOI_DA], True
+    sai = []
+    for t in list(ds):
+        try:
+            check_ident(t)
+        except ValueError:
+            sai.append(t)
+            ds.remove(t)
+    if ds:
+        kq = registry.tra_cuu(cfg, con, ds)
+        b = {f"t{i}": x["bang"] for i, x in enumerate(kq)}
+        dich = {f"d{i}": (x["replicat"][0]["tgt_table"] if x["replicat"] else x["bang"])
+                for i, x in enumerate(kq)}
+        trong = ", ".join(f":{k}" for k in b)
+        try:
+            nguon = {r["table_name"] for r in await ora.rows(
+                "SELECT table_name FROM dba_tables@DBL_PMNV WHERE owner='KT_BSH'"
+                f" AND table_name IN ({trong})", **b)}
+            prep = {r["table_name"] for r in await ora.rows(
+                "SELECT table_name FROM dba_capture_prepared_tables@DBL_PMNV"
+                f" WHERE table_owner='KT_BSH' AND table_name IN ({trong})", **b)}
+            ods = {r["table_name"] for r in await ora.rows(
+                "SELECT table_name FROM dba_tables WHERE owner='ODS' AND table_name IN"
+                " (%s)" % ", ".join(f":{k}" for k in dich), **dich)}
+            for i, x in enumerate(kq):
+                x["co_nguon"] = x["bang"] in nguon
+                x["trandata"] = x["bang"] in prep
+                x["bang_dich"] = dich[f"d{i}"]
+                x["co_dich"] = dich[f"d{i}"] in ods
+        except Exception as e:                                  # noqa: BLE001
+            loi_ora = str(e).splitlines()[0][:300]
+    return tpl.TemplateResponse(req, "tra_cuu.html", ctx(
+        req, q=q, kq=kq, loi_ora=loi_ora, sai=sai, qua_tran=qua_tran))
+
+
 # ===================================================================
 # Lich su + do thi
 # ===================================================================
@@ -450,6 +498,31 @@ async def api_series(req: Request, kind: str, hours: int = 24):
         return JSONResponse(history.series(con, kind, max(1, min(hours, 24 * 400))))
     except ValueError as e:
         return JSONResponse({"loi": str(e)}, status_code=400)
+
+
+# ===================================================================
+# Bieu do log: dung luong moi loai log, toc do tang, dia con chua bao lau
+# ===================================================================
+KHOANG_LOG = (24, 168, 720, 2160)      # 1 ngay, 7 ngay, 30 ngay, 90 ngay
+
+
+@app.get("/bieu-do-log", response_class=HTMLResponse)
+async def trang_bieu_do_log(req: Request, hours: int = 168):
+    u = current_user(req)
+    if not u:
+        return RedirectResponse("/login", status_code=303)
+    hours = hours if hours in KHOANG_LOG else 168
+    bc = logsize.bao_cao(con, cfg, hours, collector.log_do)
+    return tpl.TemplateResponse(req, "bieu_do_log.html", ctx(
+        req, bc=bc, hours=hours, khoang=KHOANG_LOG))
+
+
+@app.get("/api/bieu-do-log")
+async def api_bieu_do_log(req: Request, hours: int = 168):
+    if not current_user(req):
+        return JSONResponse({"loi": "chưa đăng nhập"}, status_code=401)
+    return JSONResponse(logsize.bao_cao(con, cfg, max(1, min(hours, 24 * 400)),
+                                        collector.log_do, kem_diem=True))
 
 
 # ===================================================================
@@ -563,20 +636,37 @@ OPS: dict[str, tuple[str, str, str]] = {
     "WIZARD_STEP":       (L2, "WIZARD",            "Bước trong quy trình"),
     "WIZARD_ROLLBACK":   (L2, "KHONG_CO",          "Dọn sạch phiên tạo luồng mới"),
     "REGISTRY_ADD":      (L1, "KHONG_CO",          "Đăng ký bảng mới vào danh sách quản lý"),
+    # Chi xoa dong trong managed_table cua bang CHUA thuoc luong nao. Khong
+    # cham GoldenGate / bang dich / TRANDATA - xem registry.bo_dang_ky_nhieu.
+    "REGISTRY_DEL":      (L1, "KHONG_CO",          "Bỏ đăng ký bảng khỏi danh sách quản lý"),
     # Thao tac nhanh: MOT nghi thuc L2 cho CA LUOT thay vi tung buoc.
     # Xem app/auto.py de biet cai gi duoc danh doi va cai gi thi khong.
     "AUTO_ADD_TABLE":    (L2, "KHONG_CO",          "Thao tác nhanh: thêm bảng vào luồng"),
     "AUTO_RESYNC":       (L2, "KHONG_CO",          "Thao tác nhanh: đồng bộ lại bảng"),
+    "AUTO_GO_BANG":      (L2, "KHONG_CO",          "Thao tác nhanh: GỠ bảng khỏi luồng đang chạy"),
     "AUTO_TIEP":         (L2, "KHONG_CO",          "Thao tác nhanh: chạy tiếp phiên đang dừng"),
     # Thao tac NGUY HIEM NHAT cua cong cu: dang ky mot tien trinh doc redo
     # vao DB NGUON production, va ghi vao conf/app.toml.
     "AUTO_NEW_STREAM":   (L2, "KHONG_CO",          "Thao tác nhanh: tạo luồng MỚI và đưa bảng đầu tiên vào"),
+    # Luong LOG (2026-10-20): dich <TEN>_LOG, moi thao tac thanh mot dong INSERT.
+    "AUTO_LUONG_LOG":    (L2, "KHONG_CO",          "Luồng log: tạo luồng LOG MỚI và đưa bảng đầu tiên vào"),
+    "AUTO_THEM_LOG":     (L2, "KHONG_CO",          "Luồng log: thêm bảng vào luồng log"),
+    "AUTO_GO_LOG":       (L2, "KHONG_CO",          "Luồng log: GỠ bảng khỏi luồng log"),
     # Khoi phuc an toan: CHI start/stop, nen hoan tac duoc -> L1.
     # Khong phai L2: khi dang co su co, bat go tay ten bang la dat them ma
     # sat vao dung luc can nhanh nhat, ma khong doi lay them an toan nao -
     # moi thao tac no chay deu dao nguoc duoc trong mot cu bam.
     "KHOI_PHUC":         (L1, "KHOI_PHUC",         "Khôi phục an toàn một luồng"),
 }
+
+
+# Thao tac nhanh -> loai quy trinh. Them mot thao tac nhanh moi = them mot
+# dong o day va mot dong o OPS, khong them nhanh if.
+KIND_AUTO = {"AUTO_ADD_TABLE": "ADD_TABLE", "AUTO_RESYNC": "RESYNC_TABLE",
+             "AUTO_GO_BANG": "GO_BANG",
+             "AUTO_THEM_LOG": "THEM_LOG", "AUTO_GO_LOG": "GO_LOG"}
+# Thao tac TAO LUONG (cham DB nguon: dang ky capture) -> loai quy trinh.
+KIND_TAO_LUONG = {"AUTO_NEW_STREAM": "LUONG_MOI", "AUTO_LUONG_LOG": "LUONG_LOG"}
 
 
 def _deny_html(e: Exception, code: int = 403) -> HTMLResponse:
@@ -587,7 +677,7 @@ def _deny_html(e: Exception, code: int = 403) -> HTMLResponse:
 
 def _pf_cua(op: str, target: str) -> tuple[str, str]:
     """Pre-flight nao ap cho op nay, tren doi tuong nao."""
-    if op in ("AUTO_ADD_TABLE", "AUTO_RESYNC", "AUTO_NEW_STREAM"):
+    if op in KIND_AUTO or op in KIND_TAO_LUONG:
         # Muc kiem rieng, KHONG dung "KHONG_CO": nhan cua KHONG_CO la "thao
         # tac chi doc", hien dong do truoc mot luot co the xoa sach bang la
         # gay nham theo huong nguy hiem nhat.
@@ -621,13 +711,19 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                      keycols: str = Form(""),
                      ns_extract: str = Form(""), ns_replicat: str = Form(""),
                      ns_trail: str = Form(""), ns_ckpt: str = Form(""),
-                     ns_sid: str = Form(""), ns_ten: str = Form("")):
+                     ns_sid: str = Form(""), ns_ten: str = Form(""),
+                     tat_trandata: str = Form("")):
     u = current_user(req)
     if not u:
         return HTMLResponse("<p>Chưa đăng nhập</p>", status_code=401)
     if op not in OPS:
         return _deny_html(ValueError(f"thao tác không hợp lệ: {op!r}"), 400)
     level, _, nhan = OPS[op]
+    if op == "REGISTRY_DEL" and tat_trandata:
+        # Tat TRANDATA cham DB NGUON production -> L2 (xem safety.py), du
+        # phan xoa dong danh sach chi la L1.
+        level = L2
+        nhan = "Bỏ đăng ký bảng VÀ tắt TRANDATA ở nguồn"
 
     # Pre-flight do NGAY tai day. Ket qua vao Pending va se duoc do LAI o
     # /action/fire - token song 60 giay chinh la de ep dieu nay.
@@ -639,7 +735,37 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
     if op == "REGISTRY_ADD":
         # Luong di qua `payload` (o select dat vao hidden) hoac `stream_sel`.
         extra = {"stream": (payload or stream_sel or "").strip()}
+        # O nhap nhan ca danh sach (xuong dong, dau phay...): chuan hoa mot
+        # dong de vet thao tac va khung xac nhan hien DUNG cai se dang ky.
+        target = ", ".join(dict.fromkeys(wzmod.tach_ten_bang(target)))
         dif = ""
+    if op == "REGISTRY_DEL":
+        # Kiem NGAY LUC ARM: bi tu choi thi biet ly do truoc khi bam xac nhan.
+        target = ", ".join(dict.fromkeys(wzmod.tach_ten_bang(target)))
+        ds = wzmod.tach_ten_bang(target)
+        try:
+            registry.bo_dang_ky_nhieu(con, ds, chi_kiem=True,
+                                      tat_trandata=bool(tat_trandata))
+            if tat_trandata:
+                dang_cap = registry.bang_trong_extract(cfg)
+                vuong = [f"{x} (trong {dang_cap[x]})" for x in ds if x in dang_cap]
+                if vuong:
+                    raise registry.BoDangKyError(
+                        "Không tắt TRANDATA: bảng vẫn nằm trong file tham số Extract - "
+                        + ", ".join(vuong))
+        except registry.BoDangKyError as e:
+            return _deny_html(e, 400)
+        if tat_trandata:
+            # Go tay so bang: L2 bat go tay; go ca danh sach 20 ten thi
+            # nguoi ta se dan, va dan thi khong con la doc lai.
+            extra["go_tay"] = f"TAT TRANDATA {len(ds)} BANG"
+            extra["tat_trandata"] = True
+            dif = ("Sẽ chạy ở DB nguồn (@PMNV), từng bảng một:\n"
+                   + "\n".join(f"  delete trandata KT_BSH.{x}" for x in ds)
+                   + "\nrồi đọc lại `info trandata`; chỉ bảng ĐÃ TẮT mới bị xoá khỏi "
+                     "danh sách quản lý.")
+        else:
+            dif = ""
     if op == "KHOI_PHUC":
         # Ban xem truoc la CHINH ban chan doan: nguoi dung thay ro se chay
         # lenh nao, theo thu tu nao, va vi sao - truoc khi bam.
@@ -659,11 +785,11 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
         dif = khoiphuc.xem_truoc(k)
         extra = {"kham_luc_arm": {"n_tab": k["n_tab"], "n_map": k["n_map"],
                                   "so_lenh": len(k["ke_hoach"])}}
-    if op in ("AUTO_ADD_TABLE", "AUTO_RESYNC"):
+    if op in KIND_AUTO:
         # Kiem DIEU KIEN NGAY LUC ARM, truoc khi nguoi dung go ten bang: bi
         # tu choi thi phai biet ly do NGAY, khong phai sau khi da mo mot
         # phien roi no chet o buoc 1.
-        kind = "ADD_TABLE" if op == "AUTO_ADD_TABLE" else "RESYNC_TABLE"
+        kind = KIND_AUTO[op]
         try:
             auto.kiem_dieu_kien(con, kind, (target or "").strip().upper())
         except auto.AutoError as e:
@@ -673,13 +799,13 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                  "stream": (payload or stream_sel or "").strip(),
                  "keycols": keycols.strip().upper()}
         dif = ""
-    if op == "AUTO_NEW_STREAM":
-        # Tao luong MOI. Kiem DU dieu kien NGAY LUC ARM - bi tu choi thi
+    if op in KIND_TAO_LUONG:
+        # Tao luong MOI (thuong hoac LOG). Kiem DU dieu kien NGAY LUC ARM - bi tu choi thi
         # phai biet ly do truoc khi go ten, khong phai sau khi da dang ky
         # mot capture vao DB nguon.
         tb = (target or "").strip().upper()
         try:
-            auto.kiem_dieu_kien(con, "LUONG_MOI", tb)
+            auto.kiem_dieu_kien(con, KIND_TAO_LUONG[op], tb)
             ns_et = gg.kiem_ten_moi(ns_extract, "extract")
             ns_rep = gg.kiem_ten_moi(ns_replicat, "replicat")
             ns_pre = gg.kiem_ten_moi(ns_trail, "trail")
@@ -710,7 +836,8 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
                  "keycols": keycols.strip().upper()}
         # Ban xem truoc = DUNG KHOI se duoc ghi vao conf/app.toml.
         from . import toml_ghi
-        dif = toml_ghi.khoi_streams(sid, ns_et, ns_rep, ns_pre, ns_ten.strip())
+        dif = toml_ghi.khoi_streams(sid, ns_et, ns_rep, ns_pre, ns_ten.strip(),
+                                    loai="log" if op == "AUTO_LUONG_LOG" else "")
     if op == "AUTO_TIEP":
         # Chay tiep mot phien dang dung. Van la L2 va van go tay TEN BANG
         # cua phien do: "chay tiep" co the di thang vao buoc khong hoan tac
@@ -721,7 +848,7 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
             return _deny_html(e, 400)
         extra = {"go_tay": run_tiep["src_table"],
                  "keycols": keycols.strip().upper()}
-        if run_tiep["kind"] == "LUONG_MOI":
+        if run_tiep["kind"] in ("LUONG_MOI", "LUONG_LOG"):
             # Phien tao luong moi dung o buoc chot ten -> nhan ten o day,
             # va go tay TEN EXTRACT thay vi ten bang.
             if ns_extract or ns_replicat or ns_trail:
@@ -740,7 +867,7 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
             run = wizard.lay(int(target))
         except (WizardError, ValueError) as e:
             return _deny_html(e, 400)
-        if run["kind"] not in ("NEW_STREAM", "LUONG_MOI"):
+        if run["kind"] not in ("NEW_STREAM", "LUONG_MOI", "LUONG_LOG"):
             return _deny_html(ValueError(
                 "rollback nay chi cho quy trinh tao luong moi"), 400)
         # Go tay TEN EXTRACT: do moi la thu nguoi dung can doc lai mot lan
@@ -852,13 +979,21 @@ def _luong_cua(p) -> str:
             rid = t.split(":", 1)[0]
             r = con.execute("SELECT stream FROM wizard_run WHERE id=?",
                             (int(rid),)).fetchone()
-            return (r["stream"] or "") if r else ""
-        if p.action == "AUTO_NEW_STREAM":
+            # Luong da bi go khoi cau hinh (phien tao luong moi da don) thi
+            # khong co gi de khoi phuc - hien nut cho no la nut chet.
+            s = (r["stream"] or "") if r else ""
+            return s if s in cfg.streams else ""
+        if p.action in KIND_TAO_LUONG:
             # Luc ban co chua co phien va chua co luong - khong co gi de
             # "khoi phuc". Nut dung o day la DON SACH, do khung theo doi
             # song hien ra, khong phai nut khoi phuc.
             return ""
-        if p.action in ("AUTO_ADD_TABLE", "AUTO_RESYNC", "ADD_TRANDATA"):
+        if p.action in ("AUTO_THEM_LOG", "AUTO_GO_LOG"):
+            r = con.execute("SELECT stream FROM managed_log WHERE src_table=?",
+                            (t.upper(),)).fetchone()
+            s_ = (r["stream"] or "") if r else ""
+            return s_ if s_ in cfg.streams else ""
+        if p.action in ("AUTO_ADD_TABLE", "AUTO_RESYNC", "AUTO_GO_BANG", "ADD_TRANDATA"):
             r = con.execute(
                 "SELECT stream FROM managed_table WHERE src_table=?",
                 (t.upper(),)).fetchone()
@@ -955,13 +1090,13 @@ async def _thuc_thi(p, who: str) -> dict:
             raise err
         return {"msg": r["msg"], "chi_tiet": ct}
 
-    if op in ("AUTO_ADD_TABLE", "AUTO_RESYNC"):
+    if op in KIND_AUTO:
         # Mo phien roi THA cho mot task NEN chay het. Khong chay trong
         # request: mot luot co the mat hang chuc phut (buoc nap, buoc cho
         # Extract bat kip, buoc cho Replicat ap het phan chong lan), con
         # request HTTP thi khong the giu lau nhu vay.
         import asyncio as _a
-        kind = "ADD_TABLE" if op == "AUTO_ADD_TABLE" else "RESYNC_TABLE"
+        kind = KIND_AUTO[op]
         rid = tudong.mo_phien(kind, t.strip().upper(),
                               stream=p.extra.get("stream") or "", who=who,
                               keycols=p.extra.get("keycols") or "")
@@ -980,21 +1115,27 @@ async def _thuc_thi(p, who: str) -> dict:
                     "",
                     "/wizard/%s" % rid]}
 
-    if op == "AUTO_NEW_STREAM":
+    if op in KIND_TAO_LUONG:
         import asyncio as _a
+        kind_tl = KIND_TAO_LUONG[op]
         rid = tudong.mo_phien(
-            "LUONG_MOI", p.extra["bang"], stream="", who=who,
+            kind_tl, p.extra["bang"], stream="", who=who,
             keycols=p.extra.get("keycols") or "",
             ten_moi={k: p.extra.get(k, "") for k in (
                 "extract", "replicat", "trail_prefix", "ckpt_table",
                 "stream_id", "stream_ten")})
         _a.create_task(tudong.chay(rid, who=who, ly_do=p.reason))
-        return {"msg": "Đã mở quy trình tạo luồng mới #%s (29 bước) và bắt đầu "
-                       "chạy tự động. Theo dõi ở khung bên trên." % rid,
+        return {"msg": "Đã mở quy trình tạo luồng mới #%s (%d bước) và bắt đầu "
+                       "chạy tự động. Theo dõi ở khung bên trên."
+                       % (rid, wzmod.tong_buoc(kind_tl)),
                 "chi_tiet": [
-                    "Buoc 10 dang ky mot tien trinh doc redo vao DB NGUON.",
-                    "Buoc 14 ghi them khoi [streams.%s] vao conf/app.toml"
-                    % p.extra.get("stream_id", ""),
+                    "Buoc %d dua bang vao danh sach quan ly cua cong cu."
+                    % wzmod.so_buoc(kind_tl, "DANG_KY_BANG"),
+                    "Buoc %d dang ky mot tien trinh doc redo vao DB NGUON."
+                    % wzmod.so_buoc(kind_tl, "REGISTER_EXTRACT"),
+                    "Buoc %d ghi them khoi [streams.%s] vao conf/app.toml"
+                    % (wzmod.so_buoc(kind_tl, "DANG_KY_CAU_HINH"),
+                       p.extra.get("stream_id", "")),
                     "  (luu ban cu, ghi nguyen tu, doc lai doi chieu) roi nap nong",
                     "  - KHONG phai khoi dong lai cong cu.",
                     "",
@@ -1028,6 +1169,59 @@ async def _thuc_thi(p, who: str) -> dict:
                             "du lieu that va dem NULL tung cot khoa.", ""] if kc else []) + [
                     "/wizard/%s" % rid]}
 
+    if op == "REGISTRY_DEL":
+        # Chi xoa dong trong danh sach quan ly. KHONG cham GoldenGate, bang
+        # dich hay TRANDATA o nguon. Kiem lai toan bo dieu kien o day: 60
+        # giay tu luc arm co the da co nguoi mo phien tren bang do.
+        ds = wzmod.tach_ten_bang(t)
+        tat = bool(p.extra.get("tat_trandata"))
+        if not tat:
+            dong = registry.bo_dang_ky_nhieu(con, ds)
+            return {"msg": f"Đã bỏ đăng ký {len(dong)} bảng khỏi danh sách quản lý",
+                    "chi_tiet": [f"{r['src_table']:30s} (luồng ghi: {r['stream'] or 'rỗng'})"
+                                 for r in dong] + [
+                        "",
+                        "Chỉ xoá dòng trong danh sách quản lý của công cụ.",
+                        "KHÔNG đụng: file tham số Extract/Replicat, bảng đích ở ODS,",
+                        "TRANDATA ở nguồn. Muốn dùng lại bảng thì đăng ký lại."]}
+
+        # Co tat TRANDATA. Kiem LAI moi dieu kien (60 giay tu luc arm).
+        registry.bo_dang_ky_nhieu(con, ds, chi_kiem=True, tat_trandata=True)
+        dang_cap = registry.bang_trong_extract(cfg)
+        if vuong := [x for x in ds if x in dang_cap]:
+            raise ValueError("Bảng vẫn nằm trong file tham số Extract: "
+                             + ", ".join(f"{x} ({dang_cap[x]})" for x in vuong))
+        chi_tiet, xong, giu = [], [], []
+        for x in ds:
+            da_bat, _ = await gg.info_trandata(cfg, "KT_BSH", x)
+            if da_bat:
+                tat_ok, lines = await gg.delete_trandata(cfg, "KT_BSH", x)
+                if not tat_ok:
+                    giu.append(x)
+                    chi_tiet.append(f"{x:30s} KHÔNG tắt được TRANDATA - giữ trong danh sách")
+                    chi_tiet += ["    " + l for l in lines if not l.startswith("__")][-6:]
+                    continue
+            con_prep = await ora.scalar(
+                "SELECT COUNT(*) FROM dba_capture_prepared_tables@DBL_PMNV"
+                " WHERE table_owner='KT_BSH' AND table_name=:t", t=x)
+            if con_prep:
+                # sync() doc dung view nay - con o day thi dong se quay lai.
+                giu.append(x)
+                chi_tiet.append(f"{x:30s} TRANDATA đã tắt nhưng vẫn còn trong "
+                                "dba_capture_prepared_tables - giữ trong danh sách")
+                continue
+            con.execute("UPDATE managed_table SET prepared=0 WHERE src_table=?", (x,))
+            xong.append(x)
+            chi_tiet.append(f"{x:30s} TRANDATA "
+                            f"{'đã tắt' if da_bat else 'vốn đã tắt'}")
+        dong = registry.bo_dang_ky_nhieu(con, xong) if xong else []
+        return {"msg": f"Đã tắt TRANDATA và bỏ đăng ký {len(dong)}/{len(ds)} bảng"
+                       + (f" - {len(giu)} bảng GIỮ LẠI, xem chi tiết" if giu else ""),
+                "chi_tiet": chi_tiet + [
+                    "",
+                    "Không đụng file tham số Extract/Replicat và bảng đích ở ODS.",
+                    "Muốn dùng lại bảng: đăng ký lại, quy trình thêm bảng sẽ bật lại TRANDATA."]}
+
     if op == "REGISTRY_ADD":
         # Registry VUA la danh muc doi chieu, VUA la allowlist lop 5 chong SQL
         # injection. Vi the them mot bang vao day la mot THAO TAC CO AUDIT,
@@ -1037,40 +1231,39 @@ async def _thuc_thi(p, who: str) -> dict:
         # khong con trong nguon nao - va dieu kien cua no la `note IS NULL`.
         # Vi vay dong dang ky moi PHAI co `note`, neu khong lan sync ke tiep
         # se ghi de ghi chu cua no.
-        from .adapters.ora import check_ident as _ci
-        tb = _ci(t.strip().upper())
-        st_ten = p.extra.get("stream") or ""
-        if st_ten not in cfg.streams:
+        # Nhan CA DANH SACH ten (2026-10-23): lo 20 bang khong con la 20 lan
+        # arm/fire. Tat ca hoac khong - xem registry.dang_ky_nhieu.
+        #
+        # Luong de RONG duoc phep, co chu y: bang dau tien cua mot luong
+        # CHUA TON TAI khong the gan vao luong nao - luong do chi co trong
+        # conf/app.toml sau buoc DANG KY CAU HINH cua quy trinh tao luong
+        # moi. Bat chon luong o day la mot vong khong the di.
+        st_ten = (p.extra.get("stream") or "").strip()
+        if st_ten and st_ten not in cfg.streams:
             raise ValueError(f"luồng không hợp lệ: {st_ten!r}")
-        if con.execute("SELECT 1 FROM managed_table WHERE src_table=?",
-                       (tb,)).fetchone():
-            raise ValueError(f"{tb} đã có trong danh sách quản lý")
-        n_src = await ora.scalar(
-            "SELECT COUNT(*) FROM dba_tables@DBL_PMNV"
-            " WHERE owner='KT_BSH' AND table_name=:t", t=tb)
-        if not n_src:
-            raise ValueError(
-                f"KT_BSH.{tb} KHÔNG tồn tại ở nguồn. Danh sách quản lý chỉ nhận bảng có "
-                "thật ở nguồn - đây là chốt chặn cuối chống SQL injection, không phải "
-                "một ô nhập tự do.")
-        n_tgt = await ora.scalar(
-            "SELECT COUNT(*) FROM dba_tables WHERE owner='ODS' AND table_name=:t",
-            t=tb)
-        con.execute(
-            "INSERT INTO managed_table(src_owner,src_table,tgt_owner,tgt_table,"
-            "stream,in_extract,has_map,prepared,handlecollisions,note,updated_at)"
-            " VALUES ('KT_BSH',?,'ODS',?,?,0,0,0,0,?,?)",
-            (tb, tb, st_ten,
-             f"mới đăng ký bởi {who} - chưa vào luồng nào",
-             int(time.time())))
-        return {"msg": f"Da dang ky KT_BSH.{tb} vao registry (luong {st_ten}). "
-                       f"Bang dich o ODS: "
-                       f"{'da co' if n_tgt else "CHƯA có - quy trình sẽ tạo ở bước 3"}",
-                "chi_tiet": [
-                    f"nguồn KT_BSH.{tb}: tồn tại",
-                    f"dich ODS.{tb}: {'ton tai' if n_tgt else "chưa tồn tại"}",
-                    "cả 3 cờ trong danh sách quản lý đặt 0 - bảng chưa thuộc luồng nào",
-                    "giờ có thể mở quy trình thêm bảng cho bảng này"]}
+        kq = await registry.dang_ky_nhieu(con, ora, wzmod.tach_ten_bang(t),
+                                          stream=st_ten or None, who=who)
+        moi, da_co, co_dich = kq["moi"], kq["da_co"], kq["co_dich"]
+        if not moi:
+            raise ValueError(f"{', '.join(da_co)}: đã có trong danh sách quản lý "
+                             "- không có bảng mới nào")
+        chi_tiet = [f"{x:30s} nguồn: có   đích ODS: "
+                    f"{'có' if x in co_dich else 'CHƯA có - sẽ tạo ở bước tạo bảng đích'}"
+                    for x in moi]
+        if da_co:
+            chi_tiet += ["", f"bỏ qua {len(da_co)} bảng đã đăng ký từ trước: "
+                         + ", ".join(da_co)]
+        chi_tiet += [
+            "",
+            "cả 3 cờ trong danh sách quản lý đặt 0 - bảng chưa thuộc luồng nào",
+            ("giờ có thể mở quy trình thêm bảng (chọn nhiều bảng = một lô, tối đa "
+             f"{wzmod.GIOI_HAN_LO})" if st_ten else
+             "luồng để rỗng - dùng bảng này làm bảng đầu tiên của một luồng "
+             "MỚI, quy trình tạo luồng mới sẽ gắn luồng ở bước đăng ký cấu "
+             "hình")]
+        return {"msg": f"Đã đăng ký {len(moi)} bảng vào danh sách quản lý (luồng "
+                       f"{st_ten or 'để rỗng - sẽ gắn khi tạo luồng mới'})",
+                "chi_tiet": chi_tiet}
 
     if op == "WIZARD_STEP":
         rid, no = (int(x) for x in t.split(":", 1))
@@ -1180,9 +1373,48 @@ async def wizard_list(req: Request):
     moi = [dict(r) for r in con.execute(
         "SELECT src_table, keycols FROM managed_table WHERE has_map=0"
         " ORDER BY src_table")]
+    # Bo dang ky duoc: chua thuoc luong nao (khong TABLE, khong MAP). Bang con
+    # TRANDATA thi phai tich o tat TRANDATA (L2). Bang nam trong phien dang mo
+    # thi registry tu choi luc arm.
+    bo_duoc = [dict(r) for r in con.execute(
+        "SELECT src_table, stream, prepared, note FROM managed_table"
+        " WHERE in_extract=0 AND has_map=0 ORDER BY src_table")]
     return tpl.TemplateResponse(req, "wizard.html", ctx(
         req, runs=wizard.danh_sach(), them=them, resync=resync, moi=moi,
+        bo_duoc=bo_duoc,
         kinds=list(wzmod.BO_BUOC)))
+
+
+@app.get("/log", response_class=HTMLResponse)
+async def trang_log(req: Request):
+    """Luong LOG: dich <TEN>_LOG giu MOI thay doi cua bang nguon.
+
+    Cung kieu voi Thao tac nhanh (go ten bang, mot lan xac nhan, cong cu
+    chay het quy trinh) nhung tren LUONG LOG RIENG. Danh sach goi y chi de
+    goi y khi go, khong phai de chon.
+    """
+    u = current_user(req)
+    if not u:
+        return RedirectResponse("/login", status_code=303)
+    luong_log = {sid: st for sid, st in cfg.streams.items()
+                 if str(st.get("loai", "")).lower() == "log"}
+    dang_log = [dict(r) for r in con.execute(
+        "SELECT src_table, tgt_table, stream FROM managed_log"
+        " WHERE in_extract=1 OR has_map=1 ORDER BY stream, src_table")]
+    chua_log = [dict(r) for r in con.execute(
+        "SELECT src_table FROM managed_table WHERE src_table NOT IN"
+        " (SELECT src_table FROM managed_log WHERE in_extract=1 OR has_map=1)"
+        " ORDER BY src_table")]
+    return tpl.TemplateResponse(req, "log.html", ctx(
+        req, luong_log=luong_log, dang_log=dang_log, chua_log=chua_log,
+        tl={"tong": wzmod.tong_buoc("LUONG_LOG"),
+            "trandata": wzmod.so_buoc("LUONG_LOG", "ADD_TRANDATA"),
+            "register": wzmod.so_buoc("LUONG_LOG", "REGISTER_EXTRACT"),
+            "cauhinh": wzmod.so_buoc("LUONG_LOG", "DANG_KY_CAU_HINH")},
+        th={"tong": wzmod.tong_buoc("THEM_LOG"),
+            "dung_rep": wzmod.so_buoc("THEM_LOG", "STOP_REPLICAT"),
+            "chay_rep": wzmod.so_buoc("THEM_LOG", "START_REPLICAT")},
+        gl={"tong": wzmod.tong_buoc("GO_LOG")}))
 
 
 @app.get("/nhanh", response_class=HTMLResponse)
@@ -1203,6 +1435,11 @@ async def trang_nhanh(req: Request):
     resync = [dict(r) for r in con.execute(
         "SELECT src_table, stream FROM managed_table"
         " WHERE has_map=1 AND src_table=tgt_table ORDER BY stream, src_table")]
+    # Bang go duoc: dang co dong TABLE hoac MAP trong mot luong.
+    go = [dict(r) for r in con.execute(
+        "SELECT src_table, stream FROM managed_table"
+        " WHERE (in_extract=1 OR has_map=1) AND stream IS NOT NULL"
+        " ORDER BY stream, src_table")]
     # Bang lam duoc "bang dau tien cua luong moi": chua thuoc luong nao ca.
     moi = [dict(r) for r in con.execute(
         "SELECT src_table FROM managed_table"
@@ -1211,7 +1448,17 @@ async def trang_nhanh(req: Request):
     # Khong truyen danh sach phien o day: khung theo doi song (`/nhanh/song`)
     # tu doc, va doc moi 3-10 giay chu khong phai mot lan luc tai trang.
     return tpl.TemplateResponse(req, "nhanh.html", ctx(
-        req, them=them, resync=resync, moi=moi))
+        req, them=them, resync=resync, moi=moi, go=go,
+        # So hieu buoc lay tu BO BUOC, khong go cung trong template: them mot
+        # buoc vao giua (vd DANG_KY_BANG 2026-10-20) la day ca phan sau.
+        bt={"tong": wzmod.tong_buoc("ADD_TABLE"),
+            "dang_ky": wzmod.so_buoc("ADD_TABLE", "DANG_KY_BANG"),
+            "keycols": wzmod.so_buoc("ADD_TABLE", "XAC_NHAN_KEYCOLS"),
+            "dung_rep": wzmod.so_buoc("ADD_TABLE", "STOP_REPLICAT"),
+            "chay_rep": wzmod.so_buoc("ADD_TABLE", "START_REPLICAT")},
+        gb={"tong": wzmod.tong_buoc("GO_BANG"),
+            "bo_table": wzmod.so_buoc("GO_BANG", "BO_TABLE"),
+            "bo_map": wzmod.so_buoc("GO_BANG", "BO_MAP")}))
 
 
 @app.get("/nhanh/goi-y", response_class=HTMLResponse)
@@ -1279,9 +1526,16 @@ async def nhanh_song(req: Request):
         phien.append({"run": run, "tong": tong, "buoc": buoc,
                       "dang_chay": rid in tudong.dang_chay,
                       # buoc nao la buoc hoi cot khoa / hoi ten, theo loai
-                      "buoc_keycols": {"ADD_TABLE": 2, "LUONG_MOI": 3}.get(
-                          run["kind"]),
-                      "buoc_ten": 4 if run["kind"] == "LUONG_MOI" else None})
+                      "buoc_keycols": wzmod.so_buoc(run["kind"],
+                                                    "XAC_NHAN_KEYCOLS"),
+                      "buoc_ten": wzmod.so_buoc(run["kind"], "KIEM_TEN"),
+                      # buoc cham vao DB NGUON, va buoc ghi app.toml. Lay
+                      # tu bo buoc chu KHONG go so cung: them mot buoc vao
+                      # giua la day toan bo phan sau len mot.
+                      "buoc_register": wzmod.so_buoc(run["kind"],
+                                                     "REGISTER_EXTRACT"),
+                      "buoc_cauhinh": wzmod.so_buoc(run["kind"],
+                                                    "DANG_KY_CAU_HINH")})
     return tpl.TemplateResponse(req, "_nhanh_song.html", ctx(req, phien=phien))
 
 

@@ -11,7 +11,7 @@ NO KHONG LAM GI - doc truoc khi sua file nay
     `_xn_<buoc>` de kiem chung tren DB sau viec nen. Thu tu buoc van la hang
     so trong code.
   * KHONG tu quyet cai gi can nguoi quyet. Bang khong co khoa chinh thi
-    buoc 2 dung lai va doi nguoi nhap cot khoa - chon khoa la mot phan doan
+    buoc xac nhan cot khoa dung lai doi nguoi nhap cot khoa - chon khoa la mot phan doan
     nghiep vu, khong phai viec cua may.
   * KHONG tu chay khi bang nguon va bang dich KHAC TEN (yeu cau cua nguoi
     dung), va khong tu chay khi luong dang co mot phien khac mo.
@@ -37,6 +37,11 @@ import logging
 import time
 
 from . import cho
+from .adapters.ora import SCHEMA_SOURCE, SCHEMA_TARGET, check_ident
+
+# Ba loai quy trinh cua LUONG LOG (giu dong bo voi wizard.KIND_LOG; khong
+# import tu wizard de auto.py khong keo theo ca engine).
+KIND_LOG = ("LUONG_LOG", "THEM_LOG", "GO_LOG")
 
 log = logging.getLogger("ggadmin.auto")
 
@@ -46,7 +51,7 @@ CHO_JOB_TOI_DA = 3 * 3600
 # Tran tong thoi gian mot luot. CHO_BAT_KIP va CHO_LOW_WM da tu cho ben
 # trong (10 va 20 phut), nen tran nay phai rong hon tong cac cho do.
 TONG_TOI_DA = 6 * 3600
-# LUONG_MOI dai hon han: 29 buoc, co cho Extract bat kip (toi da 20 phut),
+# LUONG_MOI dai hon han: 30 buoc, co cho Extract bat kip (toi da 20 phut),
 # cho Low WM, va mot dot nap day du.
 TONG_TOI_DA_LUONG_MOI = 10 * 3600
 
@@ -61,20 +66,47 @@ def kiem_dieu_kien(con, kind: str, bang: str) -> dict:
     Lam o day chu khong trong bo lai: nguoi dung phai biet LY DO TU CHOI
     ngay luc bam, khong phai sau khi mo mot phien roi no chet o buoc 1.
     """
+    la_log = kind in KIND_LOG
+    bang_qly = "managed_log" if la_log else "managed_table"
     r = con.execute(
         "SELECT src_owner, src_table, tgt_owner, tgt_table, stream,"
-        " prepared, in_extract, has_map FROM managed_table WHERE src_table=?",
+        f" prepared, in_extract, has_map FROM {bang_qly} WHERE src_table=?",
         (bang,)).fetchone()
-    if r is None:
+    if r is None and kind in ("LUONG_LOG", "THEM_LOG"):
+        # Quy trinh log tu dang ky o buoc dau, giong LUONG_MOI / ADD_TABLE.
+        check_ident(bang)
+        if len(bang) > 26:
+            raise AutoError("Tên bảng log %s_LOG vượt 30 ký tự." % bang)
+        r = {"src_owner": SCHEMA_SOURCE, "src_table": bang,
+             "tgt_owner": SCHEMA_TARGET, "tgt_table": bang + "_LOG",
+             "stream": None, "prepared": 0, "in_extract": 0, "has_map": 0}
+    elif r is None and kind in ("LUONG_MOI", "ADD_TABLE"):
+        # Quy trinh tao luong moi TU DANG KY bang o buoc 2, nen o day khong
+        # doi bang phai co san trong danh sach quan ly. Doi la mot vong
+        # khong the di: o dang ky bang bat chon mot luong DA CO trong
+        # conf/app.toml, ma luong nay chi ton tai tu buoc 15.
+        #
+        # Khong phai bo chot: buoc 2 kiem bang co THAT o nguon KT_BSH truoc
+        # khi ghi dong nao, va moi buoc cham vao GoldenGate deu o SAU no.
+        # Van kiem cu phap ten NGAY O DAY de mot chuoi rac khong di xa hon.
+        check_ident(bang)
+        r = {"src_owner": SCHEMA_SOURCE, "src_table": bang,
+             "tgt_owner": SCHEMA_TARGET, "tgt_table": bang, "stream": None,
+             "prepared": 0, "in_extract": 0, "has_map": 0}
+    elif r is None:
         raise AutoError(
-            "%s không nằm trong danh sách quản lý. Đăng ký bảng trước (trang "
-            "Quy trình), rồi quay lại đây. Công cụ không được chạm vào bảng "
-            "ngoài phạm vi." % bang)
+            "%s không nằm trong danh sách %s. Công cụ không được chạm vào bảng "
+            "ngoài phạm vi." % (bang, "log" if la_log else
+                                "quản lý. Đăng ký bảng trước (trang Quy trình), rồi "
+                                "quay lại đây"))
 
     # YEU CAU CUA NGUOI DUNG: che do nhanh chi ap cho bang nguon va dich
     # CUNG TEN. Khac ten thi anh xa cot co the lech theo kieu kho thay, nen
     # de nguoi dung di tung buoc va doc tung man hinh.
-    if (r["tgt_table"] or "").upper() != (r["src_table"] or "").upper():
+    # Gỡ bảng không nạp dữ liệu nên luật cùng tên (chống lệch ánh xạ cột khi
+    # nạp) không áp cho nó.
+    if kind not in ("GO_BANG",) + KIND_LOG and \
+            (r["tgt_table"] or "").upper() != (r["src_table"] or "").upper():
         raise AutoError(
             "Bảng nguồn %s và bảng đích %s KHÁC TÊN. Thao tác nhanh chỉ áp "
             "cho bảng cùng tên. Dùng quy trình từng bước ở trang Quy trình."
@@ -115,10 +147,49 @@ def kiem_dieu_kien(con, kind: str, bang: str) -> dict:
                 "Đang có phiên tạo luồng mới #%s mở (trên %s). Tối đa MỘT phiên "
                 "loại này cùng lúc - nó chạm vào DB nguồn production."
                 % (dang_mo["id"], dang_mo["src_table"]))
+    elif kind == "LUONG_LOG":
+        if r["has_map"] or r["in_extract"] or r["stream"]:
+            raise AutoError(
+                "%s đã thuộc luồng log %s. Bảng đầu tiên của luồng log mới phải chưa "
+                "thuộc luồng log nào." % (bang, r["stream"] or "?"))
+        dang_mo = con.execute(
+            "SELECT id, src_table FROM wizard_run WHERE kind IN"
+            " ('NEW_STREAM','LUONG_MOI','LUONG_LOG') AND state='OPEN'").fetchone()
+        if dang_mo:
+            raise AutoError(
+                "Đang có phiên tạo luồng mới #%s mở (trên %s). Tối đa MỘT phiên loại "
+                "này cùng lúc - nó chạm vào DB nguồn production."
+                % (dang_mo["id"], dang_mo["src_table"]))
+    elif kind == "THEM_LOG":
+        if r["has_map"] and r["in_extract"]:
+            raise AutoError("%s ĐÃ ghi log ở luồng %s (đủ TABLE và MAP)." % (bang, r["stream"]))
+    elif kind in ("GO_BANG", "GO_LOG"):
+        # Kiem tren danh sach quan ly NGAY LUC BAM; buoc 1 cua quy trinh kiem
+        # lai tren file tham so THAT (danh sach quan ly co the cham hon).
+        if not r["stream"] or not (r["in_extract"] or r["has_map"]):
+            raise AutoError(
+                "%s không có dòng TABLE/MAP trong luồng nào (theo danh sách quản "
+                "lý) - không có gì để gỡ." % bang)
+        n_tab = con.execute(
+            f"SELECT COUNT(*) FROM {bang_qly} WHERE stream=? AND in_extract=1",
+            (r["stream"],)).fetchone()[0]
+        if r["in_extract"] and n_tab <= 1:
+            raise AutoError(
+                "%s là bảng CUỐI CÙNG của luồng %s. Bỏ nó thì Extract không còn bảng "
+                "nào - đó là gỡ cả luồng, không phải gỡ một bảng." % (bang, r["stream"]))
+        dang_mo = con.execute(
+            "SELECT id, kind, src_table FROM wizard_run WHERE stream=? AND state='OPEN'",
+            (r["stream"],)).fetchone()
+        if dang_mo:
+            raise AutoError(
+                "Luồng %s đang có quy trình #%s (%s trên %s) mở. Một luồng chỉ một quy "
+                "trình cùng lúc." % (r["stream"], dang_mo["id"], dang_mo["kind"],
+                                    dang_mo["src_table"]))
     else:
         # NEW_STREAM (ban thu cong 13 buoc) CO Y khong phai che do nhanh:
         # ban tron bo la LUONG_MOI.
-        raise AutoError("chế độ nhanh chỉ hỗ trợ thêm bảng và đồng bộ lại")
+        raise AutoError("chế độ nhanh chỉ hỗ trợ thêm/gỡ bảng, đồng bộ lại, tạo luồng "
+                        "mới và các quy trình luồng log - không có %s" % kind)
 
     return dict(r)
 
@@ -140,7 +211,7 @@ class TuDong:
                  keycols: str = "", ten_moi: dict | None = None) -> int:
         """Mo phien quy trinh. Raise AutoError neu khong du dieu kien."""
         r = kiem_dieu_kien(self.con, kind, bang)
-        if kind == "LUONG_MOI":
+        if kind in ("LUONG_MOI", "LUONG_LOG"):
             # Luong CHUA ton tai -> khong doi `stream`, va `Wizard.tao` ep
             # `stream=None`. Ten cua 4 doi tuong moi dat truoc o day de buoc
             # KIEM_TEN khong phai dung lai doi nguoi go.
@@ -168,12 +239,12 @@ class TuDong:
         return rid
 
     def dat_keycols(self, rid: int, keycols: str) -> None:
-        """Dat truoc KEYCOLS cho phien, de buoc 2 khong phai dung lai doi nguoi.
+        """Dat truoc KEYCOLS cho phien, de buoc xac nhan cot khoa khong phai dung lai doi nguoi.
 
         KHONG phai duong vong qua kiem chung. Buoc XAC_NHAN_KEYCOLS van chay
         day du: cot co that o nguon khong, co DUY NHAT tren DU LIEU THAT
         khong, va tung cot khoa co bao nhieu dong NULL. Dat truoc chi thay
-        cho viec go vao o cua buoc 2 - cot khoa sai thi buoc 2 van chan.
+        cho viec go vao o cua buoc do - cot khoa sai thi buoc do van chan.
         """
         kc = ", ".join(c.strip().upper() for c in keycols.split(",") if c.strip())
         self.con.execute(
@@ -276,7 +347,7 @@ class TuDong:
             run = self.wizard.lay(rid)
         except Exception:                                     # noqa: BLE001
             return
-        if run["kind"] != "LUONG_MOI" or run["state"] != "OPEN":
+        if run["kind"] not in ("LUONG_MOI", "LUONG_LOG") or run["state"] != "OPEN":
             return
         note = run["note"] or ""
         if not note.startswith("[thao tác nhanh dừng]"):
@@ -288,6 +359,24 @@ class TuDong:
 
         ly_do = "tự dọn sau khi %s" % note[len("[thao tác nhanh dừng] "):][:200]
         log.warning("thao tác nhanh #%s: TU DON SACH - %s", rid, ly_do)
+
+        # DANH DAU "DANG DON" TRUOC KHI DON, khong phai sau.
+        #
+        # Su co 2026-10-20: ggadmin bi khoi dong lai trong luc dang don;
+        # tac vu chet giua duong va KHONG con ai ghi ket qua, nen man hinh
+        # hien y nguyen "[thao tác nhanh dừng] bước 24..." - nhin vao thi
+        # tuong luot chay chi dung lai, trong khi thuc te cau hinh da bi go
+        # va mot Extract da dang ky vao DB nguon van con. Dau nay ton tai
+        # de cho truong hop do: con thay "[đang tự dọn]" tuc la don CHUA
+        # chac xong, phai kiem tay.
+        #
+        # Cung la chot "khong bao gio tu don lan hai": dau co chua chu
+        # "tự dọn" nen lan sau ham nay thoat ngay o kiem tra ben tren.
+        self.con.execute(
+            "UPDATE wizard_run SET note=?, updated_at=? WHERE id=?",
+            ("[đang tự dọn - nếu dấu này còn thì dọn CHƯA xong, kiểm tay] "
+             + note[len("[thao tác nhanh dừng] "):][:250],
+             int(time.time()), rid))
         try:
             self.auth.audit(who, "auto", "L2", "AUTO_ROLLBACK",
                             target="%d:%s" % (rid, run["created_extract"]),
@@ -300,6 +389,8 @@ class TuDong:
                 "UPDATE wizard_run SET note=?, updated_at=? WHERE id=?",
                 ("[tự dọn] " + note[len("[thao tác nhanh dừng] "):][:300]
                  + " || " + str(r.get("msg", ""))[:200], int(time.time()), rid))
+            log.info("thao tác nhanh #%s: tu don XONG - %s", rid,
+                     str(r.get("msg", ""))[:200])
         except Exception as e:                                # noqa: BLE001
             log.exception("thao tác nhanh #%s: TU DON KHONG XONG", rid)
             self.con.execute(

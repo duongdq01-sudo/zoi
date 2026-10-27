@@ -72,14 +72,33 @@ trong quy trình đều có ghi chú riêng ngay tại chỗ &mdash; không cầ
   <p>Vào <a href="/nhanh"><strong>Thao tác nhanh</strong></a>. Ba việc hay
     làm nhất có ở đó, chỉ cần gõ tên bảng:</p>
   <ul>
-    <li><strong>Thêm bảng vào luồng</strong> &mdash; cho bảng chưa đồng bộ.</li>
+    <li><strong>Thêm bảng vào luồng</strong> &mdash; cho bảng chưa đồng bộ. Bảng
+      <strong>chưa đăng ký cũng chạy được</strong>: bước 1 tự đưa vào danh sách
+      quản lý (chọn luồng ở ô bên cạnh), vẫn kiểm bảng có thật ở nguồn.</li>
+    <li><strong>Luồng log</strong> (menu riêng) &mdash; đích <code>ODS.&lt;TÊN&gt;_LOG</code>
+      giữ <strong>lịch sử</strong>: mỗi INSERT/UPDATE/DELETE ở nguồn thành một dòng
+      INSERT, kèm <code>LOG_TYPE</code> (I/U/D), <code>COMMIT_TS</code> và
+      <code>LOG_TIME</code> (SYSDATE lúc ghi). Chạy trên luồng log riêng
+      (<code>LOGALLSUPCOLS</code> + <code>UPDATERECORDFORMAT FULL</code> ở Extract,
+      <code>INSERTALLRECORDS</code> ở Replicat, <code>TRANDATA ALLCOLS</code> ở nguồn). Không
+      nạp dữ liệu ban đầu, không lan DDL. Một bảng được vừa đồng bộ thường vừa ghi
+      log.</li>
+    <li><strong>Gỡ bảng khỏi luồng</strong> &mdash; tích ô «Gỡ bảng khỏi luồng»
+      trong cùng khối đó. 10 bước, thứ tự ngược của thêm bảng: bỏ dòng TABLE
+      trước, chạy lại Extract, chờ Replicat <strong>áp hết</strong> phần đã ghi của
+      bảng, rồi mới bỏ dòng MAP. Không gỡ được bảng cuối cùng của một Extract.
+      Giữ nguyên TRANDATA ở nguồn và dữ liệu ở đích.</li>
     <li><strong>Đồng bộ lại bảng</strong> &mdash; cho bảng đã đồng bộ mà dữ
       liệu lệch.</li>
-    <li><strong>Tạo luồng MỚI và đưa bảng đầu tiên vào</strong> (29 bước)
+    <li><strong>Tạo luồng MỚI và đưa bảng đầu tiên vào</strong> (30 bước)
       &mdash; cho bảng chưa thuộc luồng nào mà muốn có Extract/Replicat
-      riêng. <span class="bad">Nguy hiểm nhất</span>: bước 10 đăng ký một
+      riêng. <strong>Bảng chưa đăng ký cũng chạy được</strong>: bước 2 của
+      quy trình này tự đưa bảng vào danh sách quản lý (vẫn kiểm bảng có thật
+      ở nguồn), vì bảng đầu tiên của một luồng chưa tồn tại thì không gắn
+      được vào luồng nào để đăng ký trước.
+      <span class="bad">Nguy hiểm nhất</span>: bước 11 đăng ký một
       tiến trình đọc redo vào <strong>DB nguồn production</strong>, và bước
-      14 ghi thêm khối <code>[streams]</code> vào
+      15 ghi thêm khối <code>[streams]</code> vào
       <code>conf/app.toml</code> (lưu bản cũ, đọc lại đối chiếu, không phải
       khởi động lại). Hỏng ở bất kỳ bước nào thì công cụ <strong>tự dọn
       sạch</strong> &mdash; kể cả bỏ đăng ký ở DB nguồn &mdash; nhưng

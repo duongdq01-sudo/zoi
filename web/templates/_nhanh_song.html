@@ -7,8 +7,16 @@
   xong la khung nay dung yen cho den khi F5 - dung cai no sinh ra de tranh.
 #}
 {% set co_chay = phien | selectattr('dang_chay') | list %}
+{# KHONG VE LAI KHI NGUOI DUNG DANG GO (su co 2026-10-20).
+   Khung nay thay CA CHINH NO (outerHTML) moi 3-10 giay. Cac form "Don sach"
+   va "Chay tiep" nam BEN TRONG no, ma o ly do bat go tu 10 ky tu: go chua
+   xong thi form bi thay moi, chu da go MAT SACH, bam nut tren form rong thi
+   trinh duyet chan vi thieu ly do - nguoi dung thay "bam khong co phan hoi",
+   log khong co mot POST nao. `ggDangGo` (base.html) tra true khi con tro dang
+   o trong mot o nhap cua khung, hoac mot o nhap da co chu - luc do bo qua
+   nhip nay, nhip sau thu lai. #}
 <div hx-get="/nhanh/song" hx-swap="outerHTML"
-     hx-trigger="load delay:{{ '3s' if co_chay else '10s' }}">
+     hx-trigger="every {{ '3s' if co_chay else '10s' }} [!ggDangGo(this)]">
 
 {% if not phien %}
 <article>
@@ -23,7 +31,8 @@
 {% for p in phien %}
 {% set r = p.run %}
 {% set dung = r.note and ('dừng' in r.note or 'dọn' in r.note) %}
-{% set la_lm = r.kind == 'LUONG_MOI' %}
+{# LUONG_LOG cung tao capture o DB nguon -> cung khung don sach. #}
+{% set la_lm = r.kind in ('LUONG_MOI', 'LUONG_LOG') %}
 {% set da_don = r.note and 'tự dọn' in r.note %}
 <article style="border-left:5px solid {{ 'var(--danger)' if dung else ('var(--orange-500)' if p.dang_chay else 'var(--blue-500)') }}">
   <header>
@@ -31,8 +40,8 @@
     <code>{{ r.kind }}</code> trên <code>{{ r.src_table }}</code>
     <small class="muted">
       {%- if r.stream %}luồng {{ r.stream }}
-      {%- elif la_lm %}<span class="warn">luồng CHƯA đăng ký &mdash; bước 14 sẽ ghi
-        vào app.toml</span>
+      {%- elif la_lm %}<span class="warn">luồng CHƯA đăng ký &mdash; bước
+        {{ p.buoc_cauhinh }} sẽ ghi vào app.toml</span>
       {%- endif %}
       {%- if r.created_extract %} &middot; <code>{{ r.created_extract }}</code>/<code>{{ r.created_replicat }}</code>{% endif %}
       &middot; mở bởi {{ r.created_by }} lúc {{ r.created_at|hhmm }}</small>
@@ -113,7 +122,8 @@
   </div>
   {% endif %}
 
-  {% if la_lm and not p.dang_chay and r.created_extract and r.cur_step >= 10 %}
+  {% if la_lm and not p.dang_chay and r.created_extract
+        and r.cur_step >= p.buoc_register %}
   {# DON SACH. Bo lai DA tu don khi mot buoc hong (yeu cau nguoi dung
      2026-10-15), nen khoi nay chi con hai cong dung - va ca hai deu that:
        - tu don KHONG XONG (lenh unregister loi) -> phai co duong bam tay
@@ -121,7 +131,7 @@
          chung) -> khong ai tu don cho no #}
   <div style="margin:.6rem 0;padding:.6rem;border:3px solid var(--danger);border-radius:8px">
     <strong class="bad">Lượt này đã chạy qua bước đăng ký ở DB NGUỒN</strong>
-    <p><small>Từ bước 10, <code>{{ r.created_extract }}</code> đã được đăng ký vào DB
+    <p><small>Từ bước {{ p.buoc_register }}, <code>{{ r.created_extract }}</code> đã được đăng ký vào DB
     nguồn production. Không đi tiếp được thì <strong>phải dọn sạch</strong>: một tiến
     trình đọc redo mồ côi sẽ giữ archive log và đọc redo VĨNH VIỄN.
     {% if da_don %}<br><strong class="bad">Công cụ đã tự dọn một lần và chưa xong</strong>
@@ -132,7 +142,7 @@
     Extract, <strong>bỏ đăng ký ở DB nguồn</strong>, xoá file tham số và trail của phiên.
     <br>Nó <strong>không</strong> xoá bảng đích đã tạo (có thể đã có dữ liệu) và
     <strong>không</strong> tắt TRANDATA ở bảng nguồn.</small></p>
-    <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+    <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
       <input type="hidden" name="op" value="WIZARD_ROLLBACK">
       <input type="hidden" name="target" value="{{ r.id }}">
       <input type="text" name="reason" required minlength="10"
@@ -148,7 +158,7 @@
      khong bat bam tay 16 buoc con lai. Van la nghi thuc L2 day du (go tay
      ten bang, token 60 giay, pre-flight cua DUNG buoc sap chay) vi buoc ke
      tiep co the la buoc khong hoan tac duoc. #}
-  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML"
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top"
         style="margin-top:.6rem">
     <input type="hidden" name="op" value="AUTO_TIEP">
     <input type="hidden" name="target" value="{{ r.id }}">
@@ -158,8 +168,8 @@
              style="text-transform:uppercase">
     </label>
     <small class="muted">Bảng không có khoá chính thật thì phải nhập ở đây,
-      lượt chạy mới qua được bước 2. Bộ cột vẫn được kiểm tính duy nhất trên
-      dữ liệu thật và đếm NULL từng cột.</small>
+      lượt chạy mới qua được bước {{ p.buoc_keycols }}. Bộ cột vẫn được kiểm
+      tính duy nhất trên dữ liệu thật và đếm NULL từng cột.</small>
     {% endif %}
     {% if la_lm and p.buoc_ten and r.cur_step == p.buoc_ten and not r.created_extract %}
     <div hx-get="/nhanh/goi-y?bang={{ r.src_table }}" hx-trigger="load"

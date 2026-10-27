@@ -124,8 +124,18 @@ def diff_stats(old: str, new: str) -> dict:
 
 
 # ------------------------------------------------------------------- guard
-def guard(old: str, new: str, *, process: str) -> list[str]:
-    """Tra danh sach ly do TU CHOI. Rong la cho qua."""
+def guard(old: str, new: str, *, process: str,
+          cho_phep_bo: tuple[str, str] | None = None,
+          extract_cap_doi: str | None = None) -> list[str]:
+    """Tra danh sach ly do TU CHOI. Rong la cho qua.
+
+    `cho_phep_bo=(owner, table)` - CHI quy trinh GO_BANG truyen. No mo dung
+    MOT cua: cho phep so dong TABLE/MAP giam, voi dieu kien phan bi bo la
+    DUNG MOT dong cua DUNG bang do va khong dong nao khac doi. Trinh sua
+    tham so bang tay KHONG truyen -> van tu choi moi lan giam nhu truoc.
+    Bo MAP con doi `extract_cap_doi` (noi dung .prm cua Extract cung luong):
+    dong TABLE cua bang PHAI da het o do - neu khong la mat du lieu im lang.
+    """
     loi: list[str] = []
     if len(new.encode()) > MAX_SIZE:
         loi.append(f"File quá lớn ({len(new.encode()):,} byte, trần {MAX_SIZE:,})")
@@ -153,6 +163,12 @@ def guard(old: str, new: str, *, process: str) -> list[str]:
                    "trên từng dòng MAP đang nạp.")
 
     st = diff_stats(old, new)
+    if cho_phep_bo is not None:
+        loi_bo = _kiem_bo_mot_bang(old, new, process, cho_phep_bo, extract_cap_doi)
+        if loi_bo is None:
+            return loi                   # dung mot dong cua dung bang - cho qua
+        loi.append(loi_bo)
+        return loi
     if st["map_sau"] < st["map_truoc"]:
         loi.append(
             f"Số dòng MAP giảm {st['map_truoc']} -> {st['map_sau']}. Bỏ dòng MAP "
@@ -162,14 +178,17 @@ def guard(old: str, new: str, *, process: str) -> list[str]:
     if process.startswith("ET") and st["table_sau"] < st["table_truoc"]:
         loi.append(
             f"Số dòng TABLE giảm {st['table_truoc']} -> {st['table_sau']}. Đúng thứ "
-            "tự quy trình: bỏ dòng TABLE rồi CHẠY LẠI Extract, sau đó mới "
-            "chạy `DELETE TRANDATA`. Công cụ chưa hỗ trợ bỏ bảng khỏi luồng.")
+            "tự quy trình: bỏ dòng TABLE, chạy lại Extract, chờ Replicat áp hết, "
+            "rồi mới bỏ dòng MAP. Dùng thao tác nhanh «Gỡ bảng khỏi luồng» - nó đi "
+            "đúng thứ tự đó; trình sửa tham số tay không được bỏ dòng.")
     return loi
 
 
 # -------------------------------------------------------------------- ghi
 async def save(cfg, con, process: str, new_text: str, *, who: str,
-               reason: str, expect_sha: str | None = None) -> dict:
+               reason: str, expect_sha: str | None = None,
+               cho_phep_bo: tuple[str, str] | None = None,
+               extract_cap_doi: str | None = None) -> dict:
     """Ghi param file. Raise ParamError neu bat ky buoc nao khong dat."""
     cur = read(cfg, process)
 
@@ -194,7 +213,8 @@ async def save(cfg, con, process: str, new_text: str, *, who: str,
     if new_text == cur.text:
         raise ParamError("Nội dung không thay đổi")
 
-    if loi := guard(cur.text, new_text, process=process):
+    if loi := guard(cur.text, new_text, process=process,
+                    cho_phep_bo=cho_phep_bo, extract_cap_doi=extract_cap_doi):
         raise ParamError("Khung an toàn từ chối:\n- " + "\n- ".join(loi))
 
     d = diff(cur.text, new_text, name=cur.path.name)
@@ -321,6 +341,100 @@ def them_dong_map(text: str, owner: str, table: str, tgt_owner: str,
     phan.append("COLMAP (USEDEFAULTS)")
     body = text if text.endswith("\n") else text + "\n"
     return body + ", ".join(phan) + ";\n"
+
+
+def _re_table(owner: str, table: str) -> "re.Pattern":
+    return re.compile(rf"^\s*TABLE\s+{re.escape(owner)}\.{re.escape(table)}\s*;",
+                      re.I)
+
+
+def _re_map(owner: str, table: str) -> "re.Pattern":
+    return re.compile(rf"^\s*MAP\s+{re.escape(owner)}\.{re.escape(table)}\s*,", re.I)
+
+
+def _bo_dong(text: str, pat: "re.Pattern", loai: str, owner: str, table: str) -> str:
+    """Bo DUNG MOT dong khop `pat`. Khop 0 dong -> tra nguyen van (da bo
+    roi, chay lai duoc). Khop TU 2 dong -> TU CHOI: file dang co dong trung,
+    bo mot dong thi con mot dong, ma bo ca hai la tu doan."""
+    dong = text.splitlines(keepends=True)
+    trung = [i for i, l in enumerate(dong) if pat.match(l)]
+    if len(trung) > 1:
+        raise ParamError(f"Có {len(trung)} dòng {loai} cho {owner}.{table} - file đang "
+                         "có dòng trùng. Sửa tay rồi làm lại, công cụ không tự chọn "
+                         "bỏ dòng nào.")
+    if not trung:
+        return text
+    del dong[trung[0]]
+    return "".join(dong)
+
+
+def bo_dong_table(text: str, owner: str, table: str) -> str:
+    """Bo dong `TABLE <owner>.<table>;` - buoc 4 cua GO_BANG."""
+    return _bo_dong(text, _re_table(owner, table), "TABLE", owner, table)
+
+
+def bo_dong_map(text: str, owner: str, table: str) -> str:
+    """Bo dong `MAP <owner>.<table>, ...;` - buoc 8 cua GO_BANG.
+
+    Chi bo dong MAP nam tren MOT dong vat ly (dang cong cu tu sinh). Dong MAP
+    keo dai nhieu dong (dau `&`) thi `_kiem_bo_mot_bang` se thay so dong bi
+    bo khac 1 va tu choi.
+    """
+    return _bo_dong(text, _re_map(owner, table), "MAP", owner, table)
+
+
+def _kiem_bo_mot_bang(old: str, new: str, process: str, bang: tuple[str, str],
+                      extract_cap_doi: str | None) -> str | None:
+    """None = dung mot dong cua dung bang bi bo, khong gi khac doi."""
+    owner, table = bang
+    a, b = old.splitlines(), new.splitlines()
+    bo = [l for l in a if l not in b]
+    them = [l for l in b if l not in a]
+    if them:
+        return f"Quy trình gỡ bảng chỉ được BỎ dòng, nhưng bản mới THÊM {len(them)} dòng."
+    if len(bo) != 1 or len(a) - len(b) != 1:
+        return (f"Quy trình gỡ bảng chỉ được bỏ ĐÚNG MỘT dòng, bản mới bỏ "
+                f"{len(a) - len(b)} dòng.")
+    la_extract = process.startswith("ET")
+    pat = _re_table(owner, table) if la_extract else _re_map(owner, table)
+    if not pat.match(bo[0]):
+        return (f"Dòng bị bỏ không phải dòng {'TABLE' if la_extract else 'MAP'} của "
+                f"{owner}.{table}: {bo[0].strip()[:120]}")
+    if not la_extract:
+        if extract_cap_doi is None:
+            return "Bỏ dòng MAP mà không đối chiếu được file tham số của Extract."
+        if any(_re_table(owner, table).match(l) for l in extract_cap_doi.splitlines()):
+            return (f"Extract VẪN còn dòng TABLE {owner}.{table}. Bỏ MAP trước TABLE là "
+                    "MẤT DỮ LIỆU IM LẶNG: Extract vẫn ghi vào trail, Replicat bỏ qua mà "
+                    "vẫn dời mốc. Bỏ dòng TABLE trước.")
+    return None
+
+
+def dong_map_log(owner: str, table: str, tgt_owner: str, tgt_table: str) -> str:
+    """Dong MAP cua LUONG LOG: moi thao tac thanh MOT dong INSERT.
+
+    `INSERTALLRECORDS` chi chay voi `UPDATERECORDFORMAT FULL` o Extract (tai
+    lieu GG 21.3) - Extract cua luong log dat san tham so do. UPDATE ghi anh
+    SAU (Replicat mac dinh IGNOREUPDATEBEFORES), DELETE ghi gia tri cua dong
+    bi xoa (Extract LOGALLSUPCOLS + nguon TRANDATA ALLCOLS).
+    OPTYPE co the la INSERT / UPDATE / SQL COMPUPDATE / PK UPDATE / DELETE:
+    moi bien the cua UPDATE gop ve 'U'.
+    LOG_TIME khong nam trong COLMAP: cot do DEFAULT SYSDATE o dich.
+    """
+    return (f"MAP {owner}.{table}, TARGET {tgt_owner}.{tgt_table}, INSERTALLRECORDS, "
+            'COLMAP (USEDEFAULTS, LOG_TYPE = @CASE (@GETENV ("GGHEADER", "OPTYPE"), '
+            '"INSERT", "I", "DELETE", "D", "U"), '
+            'COMMIT_TS = @GETENV ("GGHEADER", "COMMITTIMESTAMP"));')
+
+
+def them_dong_map_log(text: str, owner: str, table: str, tgt_owner: str,
+                      tgt_table: str) -> str:
+    """Them dong MAP log neu chua co (khop theo `MAP <owner>.<table>,`)."""
+    if re.search(rf"^\s*MAP\s+{re.escape(owner)}\.{re.escape(table)}\s*,",
+                 text, re.I | re.M):
+        return text
+    body = text if text.endswith("\n") else text + "\n"
+    return body + dong_map_log(owner, table, tgt_owner, tgt_table) + "\n"
 
 
 def bo_handlecollisions(text: str, owner: str, table: str) -> str:

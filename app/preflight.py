@@ -128,6 +128,7 @@ class Preflight:
             "KHONG_CO": self._khong_co,
             "AUTO": self._auto,
             "KHOI_PHUC": self._khoi_phuc,
+            "LUONG_MAT": self._luong_mat,
         }.get(op)
         if fn is None:
             return Result(op, target, [Check("thao tác không rõ", False,
@@ -173,6 +174,13 @@ class Preflight:
                       "mỗi bước trong lượt vẫn đo mục kiểm của riêng nó "
                       "trước khi chạy, và không đạt là dừng ngay tại đó",
                       blocking=False)]
+
+    async def _luong_mat(self, target: str) -> list[Check]:
+        """Phien ghi mot luong ma conf/app.toml KHONG con. Luon CHAN."""
+        return [Check("luồng còn trong cấu hình", False,
+                      f"luồng {target!r} không còn trong conf/app.toml - không bước nào "
+                      "của phiên này chạy tiếp được; phiên tạo luồng mới thì chỉ còn "
+                      "đường dọn sạch")]
 
     async def _khong_co(self, target: str) -> list[Check]:
         """Buoc chi doc / khong co pre-flight rieng. Van giu 3 check chung."""
@@ -276,6 +284,33 @@ class Preflight:
     def _proc(self, name: str) -> gg.ProcState | None:
         return next((p for p in self.collector.snap.procs if p.name == name), None)
 
+    async def _proc_that(self, name: str) -> gg.ProcState | None:
+        """Tim tien trinh; KHONG thay trong anh so lieu thi doc `info all` THAT.
+
+        VI SAO CAN - su co 2026-10-20, da lam mat ca mot luong vua dung:
+        quy trinh LUONG_MOI tao Replicat o buoc ADD_REPLICAT roi chay no o
+        buoc START_REPLICAT_2. Voi mot bang nho (70k dong, nap 2 giay) hai
+        buoc do cach nhau BAY GIAY - ngan hon chu ky do cua bo thu thap, nen
+        anh so lieu luc do chua co tien trinh vua tao. Pre-flight ket luan
+        "khong thay RPMNV2 trong danh sach tien trinh" -> luot chay dung ->
+        duong tu don thao sach ca luong (gỡ cấu hình, xoá Extract đã đăng ký
+        vào DB nguồn production).
+
+        Anh so lieu la TIEN NGHI de khong goi `info all` cho moi request.
+        Mot tien trinh VUA DUOC TAO thi anh do CHUA BIET, va "chua biet"
+        khong duoc phep bien thanh "khong ton tai". Doc that o day: chi mot
+        lan ggsci, va chi khi anh so lieu khong co ten do.
+        """
+        p = self._proc(name)
+        if p is not None:
+            return p
+        try:
+            ds = await gg.info_all(self.cfg)
+        except Exception as e:                           # noqa: BLE001
+            log.warning("doc info all de tim %s that bai: %s", name, e)
+            return None
+        return next((x for x in ds if x.name == name), None)
+
     def _cap_process(self, process: str) -> tuple[str | None, str | None]:
         """Tra (extract, replicat) cua luong chua process nay."""
         for st in self.cfg.streams.values():
@@ -286,9 +321,11 @@ class Preflight:
     # ================================================================== START
     async def _start(self, target: str) -> list[Check]:
         out: list[Check] = []
-        p = self._proc(target)
+        p = await self._proc_that(target)
         if p is None:
-            return [Check("tiến trình", False, f"không thấy {target} trong danh sách tiến trình")]
+            return [Check("tiến trình", False,
+                          f"không thấy {target} trong `info all` - đã đọc trực tiếp từ "
+                          "GoldenGate, không phải từ số liệu đo cũ")]
         out.append(Check("process_dang_stopped", not p.is_running,
                          f"đang {p.status}"
                          + (" -> không cần chạy lại" if p.is_running else "")))
@@ -318,9 +355,11 @@ class Preflight:
     # =================================================================== STOP
     async def _stop(self, target: str) -> list[Check]:
         out: list[Check] = []
-        p = self._proc(target)
+        p = await self._proc_that(target)
         if p is None:
-            return [Check("tiến trình", False, f"không thấy {target} trong danh sách tiến trình")]
+            return [Check("tiến trình", False,
+                          f"không thấy {target} trong `info all` - đã đọc trực tiếp từ "
+                          "GoldenGate, không phải từ số liệu đo cũ")]
         out.append(Check("process_dang_running", p.is_running, f"đang {p.status}"))
         if target == "MGR":
             out.append(Check("không dừng Manager", False,
@@ -370,6 +409,18 @@ class Preflight:
         row = self.con.execute(
             "SELECT src_table, keycols, prepared, in_extract, has_map"
             " FROM managed_table WHERE src_table=?", (target,)).fetchone()
+        if row is None:
+            # Bang chi nam trong danh sach LOG (luong log): pham vi hop le,
+            # va TRANDATA o day la ALLCOLS - buoc tu kiem bang dba_log_groups.
+            lg = self.con.execute(
+                "SELECT src_table, prepared FROM managed_log WHERE src_table=?",
+                (target,)).fetchone()
+            if lg is not None:
+                return [Check("trong_registry", True, "có trong danh sách log"),
+                        Check("allcols", not lg["prepared"],
+                              "đã bật TRANDATA ALLCOLS -> bước này sẽ bỏ qua"
+                              if lg["prepared"] else "chưa bật TRANDATA ALLCOLS",
+                              blocking=False)]
         # Lop 5 chong injection: ten bang phai nam trong registry.
         out.append(Check("trong_registry", row is not None,
                          "có trong danh sách quản lý" if row else
@@ -377,9 +428,14 @@ class Preflight:
                          "Bảng ngoài phạm vi GoldenGate thì công cụ không được chạm vào."))
         if row is None:
             return out
+        # KHONG CHAN khi da bat: handler `_b_add_trandata` tu kiem lai bang
+        # `info trandata` va bo qua neu da bat. De chot nay CHAN thi moi
+        # luot chay LAI (vi du LUONG_MOI sau mot lan don sach - lan don co y
+        # KHONG tat TRANDATA) deu chet o buoc nay vi mot dieu VO HAI.
         out.append(Check("chua_prepared", not row["prepared"],
-                         "đã bật TRANDATA rồi -> không cần làm lại"
-                         if row["prepared"] else "chưa bật TRANDATA"))
+                         "đã bật TRANDATA rồi -> bước này sẽ bỏ qua, không làm lại"
+                         if row["prepared"] else "chưa bật TRANDATA",
+                         blocking=False))
         # Bang khong co khoa that: phai co KEYCOLS tuong minh TRUOC.
         out.append(Check("co_keycols", bool(row["keycols"]),
                          row["keycols"] or

@@ -336,6 +336,25 @@ def khong_co_PK_thi_van_bat_nhap_keycols():
     assert "KHÔNG có khoá chính thật nên công cụ không có gì để suy" in src
 
 
+@test
+def khong_PK_co_unique_index_thi_lay_cot_index():
+    """Quyet dinh 2026-10-23 (lo PMNV3): chi co unique index thi dung cot cua no.
+
+    Index theo bieu thuc bi loai (KEYCOLS chi nhan ten cot), va kiem duy
+    nhat tren du lieu that van chay sau khi suy.
+    """
+    import inspect
+    ks = _ghep(inspect.getsource(wz.Wizard._b_khao_sat))
+    assert "ui_cols=ui_cols" in ks
+    assert '"FUNCTION" not in' in ks, "index theo bieu thuc khong duoc lam khoa"
+    assert "and not pk" in ks, "co PK thi PK thang, khong lay unique index"
+    src = _ghep(inspect.getsource(wz.Wizard._b_xac_nhan_keycols))
+    assert 'ctx0.get("ui_cols")' in src and "tu_ui = True" in src
+    # nhanh unique index nam SAU nhanh PK
+    assert src.index('ctx0.get("pk_cols")') < src.index('ctx0.get("ui_cols")')
+    assert "KHÔNG duy nhất trên dữ liệu thật" in src
+
+
 # ===== 9. KEYCOLS nhieu cot: KHONG duoc dung COUNT(DISTINCT a, b)
 @test
 def kiem_duy_nhat_khong_duoc_dung_COUNT_DISTINCT_nhieu_cot():

@@ -31,7 +31,8 @@
   {% endif %}
   {% endif %}
 
-  <form hx-post="/action/fire" hx-target="#xacnhan" hx-swap="outerHTML">
+  <form hx-post="/action/fire" hx-target="#xacnhan" hx-swap="outerHTML"
+        hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="token" value="{{ p.token }}">
 
     {% if p.level == 'L2' %}
@@ -57,6 +58,9 @@
     <button type="button" class="secondary outline"
             onclick="document.getElementById('xacnhan').remove()">Huỷ</button>
     <span>&nbsp;Còn <span class="dem" id="dem">{{ p.con_lai_s }}</span>s để xác nhận</span>
+    <p class="dang-chay warn"><small><strong>Đang chạy&hellip;</strong> Có thao tác mất
+      vài phút (dọn sạch chạy tới 6 lệnh GoldenGate). Đừng bấm lại, đừng tải lại
+      trang &mdash; kết quả sẽ hiện thay chỗ khung này.</small></p>
   </form>
 
   <p><small class="muted">

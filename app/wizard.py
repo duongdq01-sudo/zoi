@@ -65,71 +65,75 @@ class Step:
 # thuoc tinh cua danh sach chu khong phai mot dong comment.
 # =====================================================================
 ADD_TABLE: tuple[Step, ...] = (
-    Step(1, "KHAO_SAT", "Khảo sát bảng ở nguồn", L0,
+    Step(1, "DANG_KY_BANG", "Đăng ký bảng vào danh sách quản lý", L1,
+         ghi_chu="Bảng chưa đăng ký thì công cụ tự đăng ký vào đúng luồng của phiên "
+                 "này - không phải qua trang Quy trình trước nữa. Bảng vẫn phải có "
+                 "THẬT ở nguồn KT_BSH. Bảng đã thuộc luồng KHÁC thì dừng."),
+    Step(2, "KHAO_SAT", "Khảo sát bảng ở nguồn", L0,
          ghi_chu="Đếm số dòng, tìm khoá chính và index duy nhất, đếm cột cho phép "
                  "NULL, xem bảng có chia phân vùng hay không."),
-    Step(2, "XAC_NHAN_KEYCOLS", "Xác nhận cột khoá (KEYCOLS)", L1,
+    Step(3, "XAC_NHAN_KEYCOLS", "Xác nhận cột khoá (KEYCOLS)", L1,
          ghi_chu="Bảng có khoá chính thật thì để trống, công cụ lấy đúng các cột của "
                  "khoá chính đó. Bảng không có thì phải nhập tay. Dù cách nào, tính "
                  "duy nhất vẫn được kiểm TRÊN DỮ LIỆU THẬT, không tin vào cấu trúc "
                  "khai báo."),
-    Step(3, "TAO_BANG_DICH", "Tạo bảng ở đích (nếu chưa có)", L2,
+    Step(4, "TAO_BANG_DICH", "Tạo bảng ở đích (nếu chưa có)", L2,
          ghi_chu="Sinh câu lệnh tạo bảng từ cấu trúc bảng nguồn: các cột, ràng buộc "
                  "NOT NULL, khoá chính, index và quyền cho tài khoản nạp. CÓ Ý không "
                  "mang theo giá trị mặc định, khoá ngoại và ràng buộc kiểm tra - một "
                  "khoá ngoại ở đích sẽ làm Replicat dừng lỗi khi thứ tự áp dữ liệu "
                  "khác thứ tự phát sinh ở nguồn. Bảng đã có thì bỏ qua."),
-    Step(4, "KIEM_BANG_DICH", "Kiểm bảng đích: cấu trúc và quyền", L0,
+    Step(5, "KIEM_BANG_DICH", "Kiểm bảng đích: cấu trúc và quyền", L0,
          ghi_chu="Bảng đích phải tồn tại, bộ cột phải khớp nguồn, và phải đủ quyền: "
                  "tài khoản nạp cần quyền ghi, tài khoản đọc cần quyền đọc. Thiếu "
                  "quyền ghi thì bước nạp sẽ thất bại SAU khi đã dừng Replicat - tức "
                  "là ở chỗ đắt nhất."),
-    Step(5, "ADD_TRANDATA", "Bật TRANDATA ở nguồn", L1, pf="ADD_TRANDATA"),
-    Step(6, "STOP_REPLICAT", "Dừng Replicat (phải làm TRƯỚC)", L1, pf="STOP",
+    Step(6, "ADD_TRANDATA", "Bật TRANDATA ở nguồn", L1, pf="ADD_TRANDATA"),
+    Step(7, "STOP_REPLICAT", "Dừng Replicat (phải làm TRƯỚC)", L1, pf="STOP",
          ghi_chu="Phải dừng Replicat TRƯỚC khi chạy lại Extract. Đảo lại là mất dữ "
                  "liệu im lặng: Extract ghi dữ liệu bảng mới vào trail, Replicat cũ "
                  "chưa có dòng MAP nên bỏ qua mà vẫn dời mốc đã xử lý."),
-    Step(7, "THEM_MAP", "Thêm dòng MAP, kèm chế độ chống trùng", L1, pf="PARAM_EDIT"),
-    Step(8, "STOP_EXTRACT", "Dừng Extract", L1, pf="STOP"),
-    Step(9, "THEM_TABLE", "Thêm dòng TABLE", L1, pf="PARAM_EDIT"),
-    Step(10, "START_EXTRACT", "Chạy Extract để nạp tham số mới", L1, pf="START"),
-    Step(11, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0,
+    Step(8, "THEM_MAP", "Thêm dòng MAP, kèm chế độ chống trùng", L1, pf="PARAM_EDIT"),
+    Step(9, "STOP_EXTRACT", "Dừng Extract", L1, pf="STOP"),
+    Step(10, "THEM_TABLE", "Thêm dòng TABLE", L1, pf="PARAM_EDIT"),
+    Step(11, "START_EXTRACT", "Chạy Extract để nạp tham số mới", L1, pf="START"),
+    Step(12, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0,
          ghi_chu="Hỏi trạng thái liên tục cho đến khi bắt kịp, không chờ một khoảng "
                  "cố định."),
-    Step(12, "SCN_FLOOR", "Đọc ngưỡng dưới của dữ liệu nạp", L0,
+    Step(13, "SCN_FLOOR", "Đọc ngưỡng dưới của dữ liệu nạp", L0,
          ghi_chu="Chỉ lấy từ mốc High Watermark, và chỉ sau khi Extract đã bắt kịp. "
                  "Không nhận mốc Low Watermark hay thời điểm hiện tại của DB - cả "
                  "hai đều cho ngưỡng sai và làm bỏ lọt dữ liệu."),
-    Step(13, "INDEX_UNUSABLE", "Tạm vô hiệu index để nạp nhanh", L2,
+    Step(14, "INDEX_UNUSABLE", "Tạm vô hiệu index để nạp nhanh", L2,
          ghi_chu="Chỉ vô hiệu index thường. GIỮ các index duy nhất ở trạng thái hoạt "
                  "động - chúng là thứ duy nhất bắt được dòng trùng NGAY trong lúc "
                  "nạp. Đo thực tế: nạp nhanh hơn 2,3 đến 3,8 lần."),
-    Step(14, "SINH_SCRIPT_NAP", "Sinh script nạp", L0,
+    Step(15, "SINH_SCRIPT_NAP", "Sinh script nạp", L0,
          ghi_chu="Lưu xuống thư mục scripts/ để đọc lại hoặc chạy tay. Bước này cũng "
                  "QUYẾT ĐỊNH xem nạp cả lô ở một thời điểm duy nhất có an toàn "
                  "không, dựa trên thời gian nguồn còn giữ được ảnh dữ liệu cũ."),
-    Step(15, "NAP", "Nạp dữ liệu ban đầu", L2, pf="LOAD",
+    Step(16, "NAP", "Nạp dữ liệu ban đầu", L2, pf="LOAD",
          ghi_chu="Chạy bằng việc nền RỜI RA khỏi tiến trình web: mất đường hầm hay "
                  "khởi động lại công cụ thì việc nạp vẫn chạy."),
-    Step(16, "INDEX_REBUILD", "Dựng lại index", L2,
+    Step(17, "INDEX_REBUILD", "Dựng lại index", L2,
          ghi_chu="Dựng lại MỌI index đang vô hiệu, không chỉ những index mình vừa vô "
                  "hiệu: một index bị bỏ sót sẽ làm các truy vấn sau này bỏ qua nó IM "
                  "LẶNG. Script tự trả index về chế độ không song song ngay sau khi "
                  "dựng lại."),
-    Step(17, "GATHER_STATS", "Cập nhật thống kê cho bộ tối ưu", L2),
-    Step(18, "START_REPLICAT", "Chạy lại Replicat (làm SAU)", L1, pf="START",
+    Step(18, "GATHER_STATS", "Cập nhật thống kê cho bộ tối ưu", L2),
+    Step(19, "START_REPLICAT", "Chạy lại Replicat (làm SAU)", L1, pf="START",
          ghi_chu="Replicat dừng suốt cửa sổ nạp nên dữ liệu ở đích đứng yên, việc "
                  "nạp không tranh chấp. Đúng thứ tự đã chạy thật qua 8 lô."),
-    Step(19, "CHO_LOW_WM", "Chờ Replicat áp hết phần chồng lấn", L0,
+    Step(20, "CHO_LOW_WM", "Chờ Replicat áp hết phần chồng lấn", L0,
          ghi_chu="Đây là chỗ DUY NHẤT trong cả hệ thống mà mốc Low Watermark là mốc "
                  "đúng: nó cho biết mọi giao dịch trước đó đã áp xong, nên phần dữ "
                  "liệu chồng lấn với đợt nạp đã được xử lý hết."),
-    Step(20, "STOP_REPLICAT_2", "Dừng Replicat để sửa tham số", L1, pf="STOP"),
-    Step(21, "BO_HANDLECOLLISIONS", "Bỏ chế độ chống trùng", L2, pf="PARAM_EDIT",
+    Step(21, "STOP_REPLICAT_2", "Dừng Replicat để sửa tham số", L1, pf="STOP"),
+    Step(22, "BO_HANDLECOLLISIONS", "Bỏ chế độ chống trùng", L2, pf="PARAM_EDIT",
          ghi_chu="Bỏ sớm là mất khả năng chống trùng; bỏ muộn là âm thầm bỏ qua lỗi "
                  "thật."),
-    Step(22, "START_REPLICAT_2", "Chạy Replicat", L1, pf="START"),
-    Step(23, "VERIFY", "Đối chiếu nguồn / đích", L1,
+    Step(23, "START_REPLICAT_2", "Chạy Replicat", L1, pf="START"),
+    Step(24, "VERIFY", "Đối chiếu nguồn / đích", L1,
          ghi_chu="Lệch thì chuyển sang quy trình đồng bộ lại bảng."),
 )
 
@@ -187,7 +191,17 @@ RESYNC_TABLE: tuple[Step, ...] = (
 #   2. Khong tu dat ten. Ten process, trail prefix (DUNG 2 ky tu), ten
 #      checkpoint table deu do DBA go; cong cu kiem trung voi 6 process +
 #      3 trail + 3 checkpoint table dang co.
+#   3. Khong tu GRANT SELECT bang checkpoint cho GGADM_RO - cong cu khong co
+#      sysdba va khong co ket noi OGG_BSH (co y). Thieu quyen thi trang chu
+#      bao ORA-00942 o "Moc da ap o dich" (gap that 2026-10-27, RPMNV2/RPMNV3/
+#      RLOG). Buoc tao bang checkpoint in san lenh de DBA chay.
 # =====================================================================
+_GHI_CHU_GRANT_CKPT = (
+    "-- VIỆC LÀM TAY SAU BƯỚC NÀY (sysdba, DB đích): công cụ chỉ đọc bằng GGADM_RO,\n"
+    "-- thiếu quyền thì trang chủ báo ORA-00942 ở 'Mốc đã áp ở đích'.\n"
+    "--   GRANT SELECT ON {ck} TO GGADM_RO;\n"
+    "-- hoặc: sqlplus / as sysdba @tools/cs13_grant_ckpt_ro.sql")
+
 NEW_STREAM: tuple[Step, ...] = (
     Step(1, "TIEN_DIEU_KIEN", "Điều kiện tiên quyết", L0,
          ghi_chu="Các tiến trình cũ đang chạy và không bị chậm; file tham số và "
@@ -231,7 +245,19 @@ NEW_STREAM: tuple[Step, ...] = (
 # NEW_STREAM + phan dua du lieu vao cua ADD_TABLE + mot buoc MOI tu ghi cau
 # hinh. NEW_STREAM giu nguyen cho duong bam tay tung buoc.
 #
-# BA DIEU CUA THU TU NAY KHONG DUOC DAO:
+# BUOC 2 DANG_KY_BANG CHI CO O LUONG_MOI, va no o day vi mot VONG KHONG
+# THE DI: o dang ky bang o trang Quy trinh bat chon mot luong DA CO trong
+# conf/app.toml, nhung luong cua quy trinh nay chi duoc ghi vao cau hinh o
+# buoc 15. Bat dang ky truoc tuc la: khong dang ky duoc thi khong mo duoc
+# quy trinh, va khong chay quy trinh thi khong co luong de dang ky.
+# NEW_STREAM (bam tay) CO Y khong co buoc nay: de di het duong do, o dang
+# ky bang nhan CA truong hop "chua co luong" (luong rong) - nguoi dung dang
+# ky truoc roi mo quy trinh.
+#
+# BON DIEU CUA THU TU NAY KHONG DUOC DAO:
+#   0. DANG_KY_BANG truoc KHAO_SAT. Registry la allowlist lop 5, va buoc
+#      DANG_KY_CAU_HINH sau nay UPDATE dong do - khong co dong thi no cap
+#      nhat 0 hang va im lang.
 #   1. XAC_NHAN_KEYCOLS truoc TAO_PARAM. Cot khoa duoc NHUNG THANG vao dong
 #      MAP sinh ra o TAO_PARAM va khong buoc nao sua lai dong do ve sau.
 #   2. TAO_BANG_DICH/KIEM_BANG_DICH truoc REGISTER_EXTRACT. Bay thieu quyen
@@ -240,7 +266,7 @@ NEW_STREAM: tuple[Step, ...] = (
 #      dung chung doc `cfg.streams[run["stream"]]` va `gg.PROCESSES`.
 #
 # CO Y KHONG CO: THEM_MAP / THEM_TABLE / STOP_EXTRACT / STOP_REPLICAT truoc
-# nap. File tham so sinh o buoc 8 DA co san dong TABLE va dong MAP (kem
+# nap. File tham so sinh o buoc TAO_PARAM DA co san dong TABLE va dong MAP (kem
 # HANDLECOLLISIONS); chay lai may buoc do la NHAN DOI dong MAP. Cua so bao
 # tri ma chung sinh ra cung khong ton tai o day: Replicat moi toanh, chua
 # tung chay, nen no da dung san suot dot nap.
@@ -249,68 +275,187 @@ LUONG_MOI: tuple[Step, ...] = (
     Step(1, "TIEN_DIEU_KIEN", "Điều kiện tiên quyết", L0,
          ghi_chu="Mọi tiến trình đang chạy phải khoẻ, đĩa còn chỗ, và bộ nhớ "
                  "streams pool đủ ở CẢ HAI đầu - luồng mới dùng chung tài nguyên đó."),
-    Step(2, "KHAO_SAT", "Khảo sát bảng ở nguồn", L0),
-    Step(3, "XAC_NHAN_KEYCOLS", "Xác nhận cột khoá (KEYCOLS)", L1,
+    Step(2, "DANG_KY_BANG", "Đăng ký bảng vào danh sách quản lý", L1,
+         ghi_chu="Bước này nằm TRONG quy trình vì ô đăng ký ở trang Quy trình bắt "
+                 "chọn một luồng ĐÃ CÓ trong conf/app.toml - mà luồng của quy trình "
+                 "này chỉ tồn tại từ bước ĐĂNG KÝ CẤU HÌNH. Bảng vẫn phải có THẬT ở "
+                 "nguồn KT_BSH; dòng mới ghi với luồng rỗng và cả ba cờ = 0."),
+    Step(3, "KHAO_SAT", "Khảo sát bảng ở nguồn", L0),
+    Step(4, "XAC_NHAN_KEYCOLS", "Xác nhận cột khoá (KEYCOLS)", L1,
          ghi_chu="Phải chốt TRƯỚC bước tạo tham số: cột khoá được nhúng thẳng vào "
                  "dòng MAP và không bước nào sửa lại dòng đó về sau."),
-    Step(4, "KIEM_TEN", "Kiểm các tên mới", L1),
-    Step(5, "TAO_BANG_DICH", "Tạo bảng ở đích (nếu chưa có)", L2),
-    Step(6, "KIEM_BANG_DICH", "Kiểm bảng đích: cấu trúc và quyền", L0,
+    Step(5, "KIEM_TEN", "Kiểm các tên mới", L1),
+    Step(6, "TAO_BANG_DICH", "Tạo bảng ở đích (nếu chưa có)", L2),
+    Step(7, "KIEM_BANG_DICH", "Kiểm bảng đích: cấu trúc và quyền", L0,
          ghi_chu="Thiếu quyền phải lộ ra Ở ĐÂY - tức là TRƯỚC khi đăng ký capture "
                  "vào DB nguồn production."),
-    Step(7, "ADD_TRANDATA", "Bật TRANDATA ở nguồn", L1, pf="ADD_TRANDATA"),
-    Step(8, "TAO_PARAM", "Tạo 2 file tham số", L1,
+    Step(8, "ADD_TRANDATA", "Bật TRANDATA ở nguồn", L1, pf="ADD_TRANDATA"),
+    Step(9, "TAO_PARAM", "Tạo 2 file tham số", L1,
          ghi_chu="File sinh ra đã có sẵn dòng TABLE và dòng MAP kèm KEYCOLS và chế độ "
                  "chống trùng - nên quy trình này KHÔNG có bước thêm MAP/TABLE."),
-    Step(9, "ADD_CHECKPOINTTABLE", "Tạo bảng checkpoint ở đích", L2),
-    Step(10, "REGISTER_EXTRACT", "Đăng ký tiến trình đọc redo ở nguồn", L2,
+    Step(10, "ADD_CHECKPOINTTABLE", "Tạo bảng checkpoint ở đích", L2),
+    Step(11, "REGISTER_EXTRACT", "Đăng ký tiến trình đọc redo ở nguồn", L2,
          ghi_chu="Từ bước này trở đi, hỏng mà không dọn là để lại một tiến trình đọc "
                  "redo MỒ CÔI giữ archive log ở DB nguồn."),
-    Step(11, "ADD_EXTRACT", "Tạo Extract ở nguồn", L2),
-    Step(12, "ADD_EXTTRAIL", "Tạo trail cho Extract", L2),
-    Step(13, "ADD_REPLICAT", "Tạo Replicat ở đích", L2),
-    Step(14, "DANG_KY_CAU_HINH", "Đăng ký luồng vào cấu hình công cụ", L2,
+    Step(12, "ADD_EXTRACT", "Tạo Extract ở nguồn", L2),
+    Step(13, "ADD_EXTTRAIL", "Tạo trail cho Extract", L2),
+    Step(14, "ADD_REPLICAT", "Tạo Replicat ở đích", L2),
+    Step(15, "DANG_KY_CAU_HINH", "Đăng ký luồng vào cấu hình công cụ", L2,
          ghi_chu="Ghi THÊM khối [streams] vào conf/app.toml (có lưu bản cũ, ghi "
                  "nguyên tử, đọc lại đối chiếu) rồi nạp nóng - không phải khởi động "
                  "lại. Từ bước sau, công cụ điều khiển được luồng mới."),
-    Step(15, "START_EXTRACT", "Chạy Extract mới", L1),
-    Step(16, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0),
-    Step(17, "SCN_FLOOR", "Đọc ngưỡng dưới của dữ liệu nạp", L0,
+    Step(16, "START_EXTRACT", "Chạy Extract mới", L1),
+    Step(17, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0),
+    Step(18, "SCN_FLOOR", "Đọc ngưỡng dưới của dữ liệu nạp", L0,
          ghi_chu="Luồng mới thì ngưỡng đúng là SCN lúc ĐĂNG KÝ capture: mọi ảnh dữ "
                  "liệu từ mốc đó trở đi đều chắc chắn được phần bắt thay đổi phủ."),
-    Step(18, "INDEX_UNUSABLE", "Tạm vô hiệu index để nạp nhanh", L2),
-    Step(19, "SINH_SCRIPT_NAP", "Sinh script nạp", L0),
-    Step(20, "NAP", "Nạp dữ liệu ban đầu", L2, pf="LOAD"),
-    Step(21, "INDEX_REBUILD", "Dựng lại index", L2),
-    Step(22, "GATHER_STATS", "Cập nhật thống kê cho bộ tối ưu", L2),
-    Step(23, "START_REPLICAT_2", "Chạy Replicat lần đầu (SAU khi nạp)", L1, pf="START",
+    Step(19, "INDEX_UNUSABLE", "Tạm vô hiệu index để nạp nhanh", L2),
+    Step(20, "SINH_SCRIPT_NAP", "Sinh script nạp", L0),
+    Step(21, "NAP", "Nạp dữ liệu ban đầu", L2, pf="LOAD"),
+    Step(22, "INDEX_REBUILD", "Dựng lại index", L2),
+    Step(23, "GATHER_STATS", "Cập nhật thống kê cho bộ tối ưu", L2),
+    Step(24, "START_REPLICAT_2", "Chạy Replicat lần đầu (SAU khi nạp)", L1, pf="START",
          ghi_chu="Replicat chưa từng chạy nên đích đứng yên suốt đợt nạp - không cần "
                  "dừng gì cả."),
-    Step(24, "CHO_LOW_WM", "Chờ Replicat áp hết phần chồng lấn", L0),
-    Step(25, "STOP_REPLICAT", "Dừng Replicat để sửa tham số", L1, pf="STOP"),
-    Step(26, "BO_HANDLECOLLISIONS", "Bỏ chế độ chống trùng", L2, pf="PARAM_EDIT"),
-    Step(27, "START_REPLICAT_3", "Chạy Replicat", L1, pf="START"),
-    Step(28, "VERIFY", "Đối chiếu nguồn / đích", L1),
-    Step(29, "KIEM_CHUNG", "Kiểm chứng luồng mới, ghi mốc discard", L0),
+    Step(25, "CHO_LOW_WM", "Chờ Replicat áp hết phần chồng lấn", L0),
+    Step(26, "STOP_REPLICAT", "Dừng Replicat để sửa tham số", L1, pf="STOP"),
+    Step(27, "BO_HANDLECOLLISIONS", "Bỏ chế độ chống trùng", L2, pf="PARAM_EDIT"),
+    Step(28, "START_REPLICAT_3", "Chạy Replicat", L1, pf="START"),
+    Step(29, "VERIFY", "Đối chiếu nguồn / đích", L1),
+    Step(30, "KIEM_CHUNG", "Kiểm chứng luồng mới, ghi mốc discard", L0),
 )
 
+# =====================================================================
+# GO_BANG: go MOT bang khoi luong dang chay (2026-10-20). Anh guong co thu
+# tu cua ADD_TABLE.
+#
+# THU TU LA HANG SO, va ly do giong het ADD_TABLE nhung nguoc chieu:
+#   BO TABLE TRUOC, BO MAP SAU. Dao lai la cai bay so mot cua he nay: Extract
+#   con dong TABLE nen van ghi bang do vao trail, Replicat da mat MAP nen bo
+#   qua MA VAN DOI MOC CHECKPOINT - mat du lieu IM LANG.
+#
+# BA CHOT RIENG:
+#   1. Khong go BANG CUOI CUNG cua Extract: Extract khong con dong TABLE nao
+#      la go ca luong, mot viec khac han.
+#   2. Buoc 3 ghi SCN Extract da doc toi luc DUNG. Moi giao dich cua bang
+#      commit truoc SCN do co the dang nam trong trail.
+#   3. Chi bo MAP khi cac giao dich do DA DUOC AP (cung dinh nghia
+#      `_qua_moc_nap` voi buoc 25/27 cua LUONG_MOI) - kiem o buoc 6 khi
+#      Replicat chay, va KIEM LAI o buoc 8 khi no da dung. "Doc het trail"
+#      la chua du: Replicat integrated khoi dong lai tu vi tri DA AP; neu MAP
+#      da mat thi giao dich chua ap cua bang bi bo qua.
+#
+# CO Y KHONG LAM: tat TRANDATA o nguon (DELETE TRANDATA cham DB nguon, va
+# bat lai thi rat re - de nguoi quyet), va xoa bang/du lieu o dich (du lieu
+# dung yen o thoi diem go).
+# =====================================================================
+GO_BANG: tuple[Step, ...] = (
+    Step(1, "KIEM_TRA_GO", "Kiểm tra trước khi gỡ", L0,
+         ghi_chu="Bảng phải đang có dòng TABLE/MAP trong luồng; KHÔNG được là bảng "
+                 "cuối cùng của Extract; Extract và Replicat phải đang chạy khoẻ."),
+    Step(2, "STOP_EXTRACT", "Dừng Extract", L1, pf="STOP"),
+    Step(3, "GHI_MOC_TRAIL", "Ghi mốc: SCN Extract đã đọc tới và cuối trail", L0,
+         ghi_chu="Mọi giao dịch của bảng commit trước mốc này có thể đang nằm trong "
+                 "trail - phải được áp hết rồi mới bỏ dòng MAP."),
+    Step(4, "BO_TABLE", "Bỏ dòng TABLE (phải làm TRƯỚC)", L2, pf="PARAM_EDIT",
+         ghi_chu="Bỏ TABLE trước MAP. Đảo lại là mất dữ liệu im lặng."),
+    Step(5, "START_EXTRACT", "Chạy lại Extract (không còn bảng này)", L1, pf="START"),
+    Step(6, "CHO_AP_HET", "Chờ Replicat áp hết phần đã ghi của bảng", L0),
+    Step(7, "STOP_REPLICAT", "Dừng Replicat", L1, pf="STOP"),
+    Step(8, "BO_MAP", "Bỏ dòng MAP", L2, pf="PARAM_EDIT",
+         ghi_chu="Kiểm LẠI điều kiện đã áp hết ngay trước khi bỏ, lúc Replicat đã "
+                 "dừng; và Extract phải không còn dòng TABLE của bảng."),
+    Step(9, "START_REPLICAT", "Chạy lại Replicat", L1, pf="START"),
+    Step(10, "KIEM_CHUNG_GO", "Kiểm chứng: hai tiến trình chạy, hai dòng đã hết", L0,
+         ghi_chu="Giữ nguyên TRANDATA ở nguồn và dữ liệu ở đích - hai việc đó để "
+                 "người quyết."),
+)
+
+# =====================================================================
+# LUONG LOG (2026-10-20): dich <TEN>_LOG giu MOI thay doi cua bang nguon.
+#
+# Moi INSERT/UPDATE/DELETE o nguon thanh MOT dong INSERT o dich, kem
+# LOG_TYPE (I/U/D), COMMIT_TS (luc commit o nguon) va LOG_TIME (SYSDATE luc
+# ghi vao dich). Ca ba quy trinh chay tren LUONG LOG RIENG (khoi [streams]
+# co `loai = "log"`) - tham so cua no ap cho CA Extract nen khong duoc tron
+# voi luong thuong:
+#   Extract  LOGALLSUPCOLS + UPDATERECORDFORMAT FULL, KHONG co DDL INCLUDE
+#            (TRUNCATE/DROP o nguon khong duoc xoa lich su o dich)
+#   Replicat INSERTALLRECORDS (chi chay voi UPDATERECORDFORMAT FULL - tai
+#            lieu GG 21.3), IGNOREUPDATEBEFORES, REPERROR mac dinh = ABEND
+#   Nguon    ADD TRANDATA ... ALLCOLS (kiem bang dba_log_groups)
+#
+# KHONG co: nap du lieu ban dau, che do chong trung, doi chieu so dong. Log
+# bat dau tu luc luong chay - dong cu cua bang khong co trong log.
+# Mot bang duoc VUA dong bo thuong VUA ghi log: danh sach quan ly cua log la
+# bang `managed_log`, tach khoi managed_table.
+# =====================================================================
+LUONG_LOG: tuple[Step, ...] = (
+    Step(1, "TIEN_DIEU_KIEN", "Điều kiện tiên quyết", L0),
+    Step(2, "DANG_KY_BANG", "Đăng ký bảng vào danh sách log", L1),
+    Step(3, "KIEM_TEN", "Kiểm các tên mới", L1),
+    Step(4, "TAO_BANG_DICH", "Tạo bảng _LOG ở đích (nếu chưa có)", L2,
+         ghi_chu="Không khoá chính, không index duy nhất, mọi cột cho phép NULL, thêm "
+                 "LOG_TYPE / COMMIT_TS / LOG_TIME."),
+    Step(5, "KIEM_BANG_DICH", "Kiểm bảng _LOG: cấu trúc, không khoá, quyền", L0),
+    Step(6, "ADD_TRANDATA", "Bật TRANDATA ALLCOLS ở nguồn", L1, pf="ADD_TRANDATA",
+         ghi_chu="DELETE/UPDATE phải mang đủ mọi cột. Kiểm bằng dba_log_groups: phải có "
+                 "nhóm ALL COLUMN LOGGING."),
+    Step(7, "TAO_PARAM", "Tạo 2 file tham số của luồng log", L1),
+    Step(8, "ADD_CHECKPOINTTABLE", "Tạo bảng checkpoint ở đích", L2),
+    Step(9, "REGISTER_EXTRACT", "Đăng ký tiến trình đọc redo ở nguồn", L2),
+    Step(10, "ADD_EXTRACT", "Tạo Extract ở nguồn", L2),
+    Step(11, "ADD_EXTTRAIL", "Tạo trail cho Extract", L2),
+    Step(12, "ADD_REPLICAT", "Tạo Replicat ở đích", L2),
+    Step(13, "DANG_KY_CAU_HINH", "Đăng ký luồng log vào cấu hình công cụ", L2),
+    Step(14, "START_EXTRACT", "Chạy Extract mới", L1),
+    Step(15, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0),
+    Step(16, "START_REPLICAT_2", "Chạy Replicat", L1, pf="START"),
+    Step(17, "KIEM_CHUNG", "Kiểm chứng luồng log", L0),
+)
+
+THEM_LOG: tuple[Step, ...] = (
+    Step(1, "DANG_KY_BANG", "Đăng ký bảng vào danh sách log", L1),
+    Step(2, "TAO_BANG_DICH", "Tạo bảng _LOG ở đích (nếu chưa có)", L2),
+    Step(3, "KIEM_BANG_DICH", "Kiểm bảng _LOG: cấu trúc, không khoá, quyền", L0),
+    Step(4, "ADD_TRANDATA", "Bật TRANDATA ALLCOLS ở nguồn", L1, pf="ADD_TRANDATA"),
+    Step(5, "STOP_REPLICAT", "Dừng Replicat (phải làm TRƯỚC)", L1, pf="STOP",
+         ghi_chu="Thêm MAP trước TABLE: đảo lại là Extract ghi bảng mới vào trail mà "
+                 "Replicat chưa có MAP - bỏ qua mà vẫn dời mốc."),
+    Step(6, "THEM_MAP", "Thêm dòng MAP log (INSERTALLRECORDS)", L1, pf="PARAM_EDIT"),
+    Step(7, "STOP_EXTRACT", "Dừng Extract", L1, pf="STOP"),
+    Step(8, "THEM_TABLE", "Thêm dòng TABLE", L1, pf="PARAM_EDIT"),
+    Step(9, "START_EXTRACT", "Chạy Extract để nạp tham số mới", L1, pf="START"),
+    Step(10, "CHO_BAT_KIP", "Chờ Extract bắt kịp nguồn", L0),
+    Step(11, "START_REPLICAT", "Chạy Replicat", L1, pf="START"),
+    Step(12, "KIEM_CHUNG_LOG", "Kiểm chứng", L0),
+)
+
+# Go mot bang khoi luong log: CUNG thu tu va CUNG handler voi GO_BANG; chi
+# khac danh sach quan ly (managed_log) - xem `Wizard._bang_qly`.
+GO_LOG: tuple[Step, ...] = GO_BANG
+
+# Ba loai quy trinh lam viec tren LUONG LOG va danh sach `managed_log`.
+KIND_LOG = ("LUONG_LOG", "THEM_LOG", "GO_LOG")
+
 BO_BUOC = {"ADD_TABLE": ADD_TABLE, "RESYNC_TABLE": RESYNC_TABLE,
-           "NEW_STREAM": NEW_STREAM, "LUONG_MOI": LUONG_MOI}
+           "NEW_STREAM": NEW_STREAM, "LUONG_MOI": LUONG_MOI, "GO_BANG": GO_BANG,
+           "LUONG_LOG": LUONG_LOG, "THEM_LOG": THEM_LOG, "GO_LOG": GO_LOG}
 
 # Hai loai quy trinh CHAM VAO DB NGUON production: dung chung khoa doc
 # quyen toan cuc (toi da MOT phien cung luc) va dung chung duong don sach.
-KIND_LUONG_MOI = ("NEW_STREAM", "LUONG_MOI")
+KIND_LUONG_MOI = ("NEW_STREAM", "LUONG_MOI", "LUONG_LOG")
 
 
 # Tien to handler rieng theo loai wizard.
 #
 # LUONG_MOI dung chung tien to "ns_" de tai su dung 13 handler tao ha tang.
 # He qua phai nho: bat ky buoc nao cua LUONG_MOI trung TEN voi mot handler
-# `_b_ns_*` se dinh vao handler do TRUOC. Day la ly do buoc 23/27 ten
+# `_b_ns_*` se dinh vao handler do TRUOC. Day la ly do buoc 24/28 ten
 # START_REPLICAT_2/_3 chu khong phai START_REPLICAT - neu khong chung se
 # dinh `_b_ns_start_replicat` (goi thang gg.start_process) thay vi
 # `_b_start_replicat` (di qua control, co ghi su kien).
-TIEN_TO = {"NEW_STREAM": "ns_", "LUONG_MOI": "ns_"}
+TIEN_TO = {"NEW_STREAM": "ns_", "LUONG_MOI": "ns_", "LUONG_LOG": "ns_"}
 
 
 # =====================================================================
@@ -340,6 +485,22 @@ TIEN_TO = {"NEW_STREAM": "ns_", "LUONG_MOI": "ns_"}
 #       bao ca lo (xem `_sql_nap`, `_sql_index`, `_sql_stats`). Rieng NAP:
 #       mot script, mot SCN, nhieu bang - day la cho tinh nhat quan nam.
 # =====================================================================
+# Trang thai inbound server cua Replicat integrated o DB DICH - doc bang
+# GGADM_RO (da thu that 2026-10-21: doc duoc ca hai view). Xem `_ap_rong`.
+# INACTIVE = apply server Oracle tam tat khi tu giam song song - khong giu
+# viec gi. RDTHU / RPMNVODS luon co mot cai nhu vay; tinh no la 'ban' thi
+# hai luong do ket o buoc cho y nhu loi cu.
+SQL_INBOUND = """
+    SELECT c.state, c.total_received, c.total_applied, c.total_ignored,
+           c.total_errors, c.unassigned_complete_txns,
+           (SELECT COUNT(*) FROM v$gg_apply_server s
+             WHERE s.apply_name = c.apply_name) AS so_server,
+           (SELECT COUNT(*) FROM v$gg_apply_server s
+             WHERE s.apply_name = c.apply_name
+               AND s.state NOT IN ('IDLE', 'INACTIVE')) AS server_ban
+      FROM v$gg_apply_coordinator c
+     WHERE c.apply_name = :a"""
+
 MOI_BANG = frozenset({
     "KHAO_SAT", "XAC_NHAN_KEYCOLS", "KIEM_BANG_DICH", "ADD_TRANDATA",
     "THEM_MAP", "THEM_TABLE", "THEM_HANDLECOLLISIONS",
@@ -349,6 +510,11 @@ MOI_BANG = frozenset({
 # Lo cang to thi cua so bao tri cang dai va mot buoc FAIL cang keo theo
 # nhieu bang. 20 la tran cung, khong phai de xuat.
 GIOI_HAN_LO = 20
+
+# Buoc VERIFY (che do LIVE): lech thi doi chieu lai trong chung nay giay
+# truoc khi ket luan LECH. Xem _b_verify.
+VERIFY_TRAN_S = 60
+VERIFY_TOI_THIEU = 3          # so lan doi chieu toi thieu truoc khi bao LECH
 
 # =====================================================================
 # QUYEN BAT BUOC tren bang dich, truoc khi dung bat cu thu gi.
@@ -379,6 +545,22 @@ def tach_ten_bang(s: str) -> list[str]:
         if t:
             ra.append(t)
     return ra
+
+
+def so_buoc(kind: str, ten: str) -> int | None:
+    """So hieu cua buoc `ten` trong quy trinh `kind`, None neu khong co.
+
+    Dung cho UI va cac thong bao: so hieu buoc KHONG duoc go cung o noi
+    khac, vi them mot buoc vao giua la day toan bo phan sau len mot.
+    """
+    for s in BO_BUOC.get(kind, ()):
+        if s.name == ten:
+            return s.no
+    return None
+
+
+def tong_buoc(kind: str) -> int:
+    return max((s.no for s in BO_BUOC.get(kind, ())), default=0)
 
 
 def buoc_cua(kind: str, no: int) -> Step:
@@ -441,7 +623,8 @@ class Wizard(IndexMixin):
             # hai loai tinh chung), vi no cham vao DB nguon production.
             dang_mo = self.con.execute(
                 "SELECT id, src_table FROM wizard_run"
-                " WHERE kind IN ('NEW_STREAM','LUONG_MOI') AND state='OPEN'").fetchone()
+                " WHERE kind IN ('NEW_STREAM','LUONG_MOI','LUONG_LOG') AND state='OPEN'"
+            ).fetchone()
             if dang_mo:
                 raise WizardError(
                     f"Đang có phiên tạo luồng mới #{dang_mo['id']} mở (trên "
@@ -451,6 +634,13 @@ class Wizard(IndexMixin):
         else:
             if stream not in self.cfg.streams:
                 raise WizardError(f"không có luồng {stream!r}")
+            la_luong_log = str(self.cfg.streams[stream].get("loai", "")).lower() == "log"
+            if kind in KIND_LOG and not la_luong_log:
+                raise WizardError(f"Luồng {stream} là luồng THƯỜNG - quy trình log chỉ chạy "
+                                  "trên luồng log.")
+            if kind not in KIND_LOG and la_luong_log:
+                raise WizardError(f"Luồng {stream} là luồng LOG (đích _LOG, chỉ INSERT) - "
+                                  "dùng menu Luồng log, không dùng quy trình thường.")
             dang_mo = self.con.execute(
                 "SELECT id, kind, src_table FROM wizard_run"
                 " WHERE stream=? AND state='OPEN'", (stream,)).fetchone()
@@ -464,12 +654,34 @@ class Wizard(IndexMixin):
         # tung bang mot bat nguoi dung sua 8 lan cho 8 bang sai.
         hang = {}
         loi: list[str] = []
+        bang_qly = "managed_log" if kind in KIND_LOG else "managed_table"
         for b in ds_bang:
             row = self.con.execute(
                 "SELECT src_owner, src_table, tgt_owner, tgt_table, keycols,"
-                " stream, has_map, in_extract, prepared FROM managed_table"
+                f" stream, has_map, in_extract, prepared FROM {bang_qly}"
                 " WHERE src_table=?", (b,)).fetchone()
-            if row is None:
+            if row is None and kind in ("LUONG_LOG", "THEM_LOG"):
+                # Dich LOG = <TEN>_LOG. Ten dinh danh toi da 30 ky tu (luat
+                # check_ident cua cong cu) -> ten nguon toi da 26.
+                if len(b) > 26:
+                    loi.append(f"{b}: tên bảng log {b}_LOG vượt 30 ký tự.")
+                    continue
+                row = {"src_owner": SCHEMA_SOURCE, "src_table": b,
+                       "tgt_owner": SCHEMA_TARGET, "tgt_table": f"{b}_LOG",
+                       "keycols": None, "stream": None,
+                       "has_map": 0, "in_extract": 0, "prepared": 0}
+            elif row is None and kind in ("LUONG_MOI", "ADD_TABLE"):
+                # LUONG_MOI tu dang ky bang o BUOC 2, nen o day KHONG doi
+                # bang phai co san trong danh sach quan ly - doi thi thanh
+                # mot vong khong the di (xem khoi chu thich cua LUONG_MOI).
+                # Khong phai bo chot: buoc 2 van kiem bang co THAT o nguon
+                # truoc khi ghi dong nao, va moi buoc cham vao GoldenGate
+                # deu o SAU buoc do.
+                row = {"src_owner": SCHEMA_SOURCE, "src_table": b,
+                       "tgt_owner": SCHEMA_TARGET, "tgt_table": b,
+                       "keycols": None, "stream": None,
+                       "has_map": 0, "in_extract": 0, "prepared": 0}
+            elif row is None:
                 loi.append(f"{b}: không nằm trong danh sách quản lý -> từ chối. Bảng ngoài phạm vi "
                            "GoldenGate thì công cụ không được chạm. Dùng thao tác đăng ký bảng để "
                            "đưa vào danh sách.")
@@ -480,6 +692,18 @@ class Wizard(IndexMixin):
                            "bộ lại nếu dữ liệu lệch.")
             if kind == "RESYNC_TABLE" and not row["has_map"]:
                 loi.append(f"{b}: chưa có dòng MAP. Dùng quy trình thêm bảng trước.")
+            if kind == "THEM_LOG" and row["has_map"] and row["in_extract"]:
+                loi.append(f"{b}: ĐÃ có trong luồng log {row['stream']} (đủ TABLE và MAP).")
+            if kind in KIND_LOG and kind != "LUONG_LOG" and row["stream"] \
+                    and row["stream"] != stream:
+                loi.append(f"{b}: danh sách log ghi bảng này thuộc luồng {row['stream']}, "
+                           f"không phải {stream}.")
+            if kind in ("GO_BANG", "GO_LOG") and not (row["in_extract"] or row["has_map"]):
+                loi.append(f"{b}: không có dòng TABLE lẫn MAP trong luồng nào - không có gì "
+                           "để gỡ.")
+            if kind in ("GO_BANG", "GO_LOG") and row["stream"] and row["stream"] != stream:
+                loi.append(f"{b}: danh sách quản lý ghi bảng này thuộc luồng {row['stream']}, "
+                           f"không phải {stream}.")
             if kind in KIND_LUONG_MOI and row["has_map"]:
                 loi.append(f"{b}: đã có dòng MAP trong một luồng khác. Bảng đầu tiên của luồng mới "
                            "phải chưa thuộc luồng nào.")
@@ -641,6 +865,14 @@ class Wizard(IndexMixin):
             # stream, cac buoc sau cua LUONG_MOI tu dong co pre-flight that
             # (STOP/START/PARAM_EDIT/LOAD) ma khong can them nhanh nao.
             return (s.pf if s.pf == "ADD_TRANDATA" else None), run["src_table"]
+        if run["stream"] not in self.cfg.streams:
+            # Phien GHI mot luong ma cau hinh KHONG CON luong do - ca phien
+            # LUONG_MOI ma duong don da go khoi [streams] (su co #6,
+            # 2026-10-20). Truoc day dong duoi KeyError, va vi trang chi
+            # tiet phien goi ham nay luc ve, CA TRANG /wizard/<id> sap 500:
+            # nut "Don sach" - thu duy nhat con dung duoc - khong bao gio
+            # hien ra. Tra ve mot pre-flight CHAN, khong phai mot ngoai le.
+            return "LUONG_MAT", run["stream"]
         st = self.cfg.streams[run["stream"]]
         if s.pf in ("STOP", "START"):
             return s.pf, (st["extract"] if "EXTRACT" in s.name else st["replicat"])
@@ -706,7 +938,11 @@ class Wizard(IndexMixin):
 
     # =============================================================== tien ich
     def _proc(self, run: dict) -> tuple[str, str, str]:
-        st = self.cfg.streams[run["stream"]]
+        st = self.cfg.streams.get(run["stream"])
+        if st is None:
+            raise WizardError(
+                f"Luồng {run['stream']!r} KHÔNG còn trong conf/app.toml - phiên này không "
+                "đi tiếp được. Nếu là phiên tạo luồng mới thì chỉ còn đường dọn sạch.")
         return st["extract"], st["replicat"], st["trail"]
 
     # ======================================================== lo nhieu bang
@@ -916,7 +1152,7 @@ class Wizard(IndexMixin):
             cols = ", ".join(r["column_name"] for r in pk)
             out.append(f"khoá chính thật: {pk[0]['constraint_name']} ({cols})")
         else:
-            out.append("khoá chính thật: KHÔNG CÓ -> phải nhập cột khoá ở bước 2")
+            out.append("khoá chính thật: KHÔNG CÓ -> phải nhập cột khoá ở bước xác nhận cột khoá")
 
         # Unique index - ke ca function-based (GG KHONG dung duoc loai nay)
         idx = await self.ora.rows(
@@ -958,10 +1194,24 @@ class Wizard(IndexMixin):
         else:
             out.append("phân vùng ở nguồn: không có")
 
+        # Khong PK -> lay unique index THUONG it cot nhat lam khoa (quyet dinh
+        # nguoi dung 2026-10-23, lo PMNV3: "chi co unique thi dung luon cac cot
+        # danh unique lam KEYCOLS"). Index theo bieu thuc bi loai: KEYCOLS chi
+        # nhan ten cot. Cung la index GG tu chon neu khong khai KEYCOLS.
+        ui = sorted((r for r in idx if r["uniqueness"] == "UNIQUE"
+                     and "FUNCTION" not in (r["index_type"] or "")),
+                    key=lambda r: (len(r["cols"].split(",")), r["index_name"]))
+        ui_cols = [c.strip() for c in ui[0]["cols"].split(",")] if ui and not pk else []
+        if ui_cols:
+            out.append(f"không có khoá chính -> cột khoá sẽ lấy từ index duy nhất "
+                       f"{ui[0]['index_name']} ({', '.join(ui_cols)})")
+
         ctx = json.loads(run["ctx_json"] or "{}")
         ctx.update(n_src=n_src, n_tgt=n_tgt, co_pk=bool(pk),
                    pk_cols=[r["column_name"] for r in pk],
                    pk_name=(pk[0]["constraint_name"] if pk else None),
+                   ui_cols=ui_cols,
+                   ui_name=(ui[0]["index_name"] if ui_cols else None),
                    cot_nullable=n_null,
                    co_unique=any(r["uniqueness"] == "UNIQUE" for r in idx))
         kw = dict(ctx_json=json.dumps(ctx, ensure_ascii=False))
@@ -978,7 +1228,7 @@ class Wizard(IndexMixin):
     async def _b_xac_nhan_keycols(self, run: dict, ts: dict) -> dict:
         kc = (ts.get("keycols") or run["keycols"] or "").strip()
         ctx0 = json.loads(run["ctx_json"] or "{}")
-        tu_pk = False
+        tu_pk = tu_ui = False
         if not kc:
             # BANG CO PK THAT: suy KEYCOLS tu PK, khong bat go tay.
             #
@@ -997,6 +1247,11 @@ class Wizard(IndexMixin):
             if ctx0.get("co_pk") and ctx0.get("pk_cols"):
                 kc = ", ".join(ctx0["pk_cols"])
                 tu_pk = True
+            elif ctx0.get("ui_cols"):
+                # Khong PK nhung co unique index thuong: dung cot cua index do.
+                # Kiem duy nhat + dem NULL tren du lieu that ben duoi VAN chay.
+                kc = ", ".join(ctx0["ui_cols"])
+                tu_ui = True
         if not kc:
             raise WizardError(
                 "Phải nhập cột khoá."
@@ -1026,6 +1281,11 @@ class Wizard(IndexMixin):
                           ctx0.get("pk_name") or "PK cua bang"))
             out.append("Vẫn kiểm tính duy nhất trên DỮ LIỆU THẬT ngay dưới - ở nguồn khoá "
                        "chính có thể đang bị tắt hoặc chưa được kiểm chứng.")
+        if tu_ui:
+            out.append("cột khoá suy từ index duy nhất (bảng không có khoá chính): %s (%s)"
+                       % (", ".join(cols), ctx0.get("ui_name") or "unique index"))
+            out.append("Vẫn kiểm tính duy nhất và đếm giá trị rỗng trên DỮ LIỆU THẬT ngay "
+                       "dưới - index duy nhất không chặn dòng có cột khoá rỗng.")
         dsc = ", ".join(f'"{c}"' for c in cols)
 
         # KIEM TREN DU LIEU THAT, khong tin vao metadata.
@@ -1097,6 +1357,28 @@ class Wizard(IndexMixin):
                 f'Bảng đích {run["tgt_owner"]}."{tt}" KHÔNG tồn tại. Tạo bảng đích trước '
                 "(xem gen_target_ddl.py), rồi quay lại bước này.")
         out.append(f'bảng đích {run["tgt_owner"]}."{tt}" tồn tại')
+        if run.get("kind") in KIND_LOG:
+            out += await self._kiem_bang_log(run, tt)
+
+        if run.get("kind") == "LUONG_MOI":
+            # BANG DICH PHAI RONG (su co #6, 2026-10-20). Script nap cua
+            # LUONG_MOI chi `INSERT /*+ APPEND */`, KHONG xoa truoc. Chay lai
+            # sau mot lan hong ma bang con du lieu cua lan truoc la NHAN DOI
+            # moi dong - va khong co chot nao phia sau bat duoc, vi doi
+            # chieu lan dau cua luong moi so voi chinh so dong vua nap.
+            # Dat o day: TRUOC khi bat TRANDATA va dang ky capture vao DB
+            # nguon. Cong cu CO Y khong tu TRUNCATE - xoa du lieu la viec
+            # nguoi quyet.
+            n_dong = await self.ora.scalar(
+                f'SELECT COUNT(*) FROM {SCHEMA_TARGET}."{check_ident(tt)}"')
+            if n_dong:
+                raise WizardError(
+                    f'Bảng đích {SCHEMA_TARGET}."{tt}" đang có {int(n_dong):,} dòng. Script '
+                    "nạp của luồng mới chỉ INSERT, không xoá trước - nạp lên là NHÂN ĐÔI dữ "
+                    "liệu. Nếu đó là dữ liệu của một lần chạy hỏng trước, chạy tay "
+                    f'TRUNCATE TABLE {SCHEMA_TARGET}."{tt}" rồi chạy lại. Công cụ cố ý không '
+                    "tự xoá.")
+            out.append("bảng đích rỗng - nạp lần đầu không nhân đôi")
 
         src = await self.ora.rows(
             "SELECT column_name, data_type FROM dba_tab_columns@DBL_PMNV"
@@ -1188,6 +1470,8 @@ class Wizard(IndexMixin):
     # BUOC 4 - ADD TRANDATA
     # =================================================================
     async def _b_add_trandata(self, run: dict, ts: dict) -> dict:
+        if run["kind"] in KIND_LOG:
+            return await self._add_trandata_log(run)
         o, t = run["src_owner"], run["src_table"]
         da, lines0 = await gg.info_trandata(self.cfg, o, t)
         if da:
@@ -1256,6 +1540,422 @@ class Wizard(IndexMixin):
                 "output": r["lines"]}
 
     # =================================================================
+    # LUONG LOG - nhanh rieng trong cac buoc dung chung
+    # =================================================================
+    @staticmethod
+    def _bang_qly(run: dict) -> str:
+        """Danh sach quan ly cua phien: managed_log cho quy trinh log."""
+        return "managed_log" if run["kind"] in KIND_LOG else "managed_table"
+
+    async def _dang_ky_log(self, run: dict) -> dict:
+        """Dua bang vao danh sach LOG. Dung cho LUONG_LOG (luong chua co ->
+        stream rong) va THEM_LOG (gan luong cua phien)."""
+        tb = check_ident((run["src_table"] or "").upper())
+        tgt = check_ident(run["tgt_table"])
+        if not await self.ora.scalar(
+                "SELECT COUNT(*) FROM dba_tables@DBL_PMNV"
+                " WHERE owner=:o AND table_name=:t", o=SCHEMA_SOURCE, t=tb):
+            raise WizardError(
+                f"{SCHEMA_SOURCE}.{tb} KHÔNG tồn tại ở nguồn. Danh sách chỉ nhận bảng có "
+                "thật ở nguồn - đó là chốt chặn cuối chống SQL injection.")
+        n_tgt = await self.ora.scalar(
+            "SELECT COUNT(*) FROM dba_tables WHERE owner=:o AND table_name=:t",
+            o=SCHEMA_TARGET, t=tgt)
+        out = [f"nguồn {SCHEMA_SOURCE}.{tb}: tồn tại",
+               f"đích {SCHEMA_TARGET}.{tgt}: "
+               + ("đã có" if n_tgt else "chưa có - bước tạo bảng _LOG sẽ tạo")]
+        thuong = self.con.execute(
+            "SELECT stream FROM managed_table WHERE src_table=? AND has_map=1",
+            (tb,)).fetchone()
+        if thuong:
+            out.append(f"bảng này CŨNG đang đồng bộ thường ở luồng {thuong['stream']} "
+                       f"(ODS.{tb}) - hai việc độc lập, không ảnh hưởng nhau")
+        lu = run["stream"]
+        cu = self.con.execute(
+            "SELECT stream, in_extract, has_map FROM managed_log WHERE src_table=?",
+            (tb,)).fetchone()
+        if cu is None:
+            self.con.execute(
+                "INSERT INTO managed_log(src_owner,src_table,tgt_owner,tgt_table,"
+                "stream,note,updated_at) VALUES (?,?,?,?,?,?,?)",
+                (SCHEMA_SOURCE, tb, SCHEMA_TARGET, tgt, lu,
+                 f"đăng ký bởi quy trình log #{run['id']}", int(time.time())))
+            out.append("đã thêm vào danh sách log" + (f", luồng {lu}" if lu else
+                                                       " (luồng gắn ở bước đăng ký cấu hình)"))
+            msg = f"Đã đăng ký {tb} vào danh sách log"
+        elif cu["stream"] and lu and cu["stream"] != lu:
+            raise WizardError(f"{tb}: danh sách log ghi bảng này thuộc luồng log "
+                              f"{cu['stream']}, không phải {lu}.")
+        elif run["kind"] == "LUONG_LOG" and (cu["has_map"] or cu["in_extract"]):
+            raise WizardError(f"{tb} đã có trong luồng log {cu['stream']} - bảng đầu tiên "
+                              "của luồng log mới phải chưa thuộc luồng log nào.")
+        else:
+            if lu and not cu["stream"]:
+                self.con.execute("UPDATE managed_log SET stream=?, updated_at=?"
+                                 " WHERE src_table=?", (lu, int(time.time()), tb))
+            out.append("đã có trong danh sách log - không ghi lại")
+            msg = f"{tb} đã có trong danh sách log"
+        return {"msg": msg, "output": out}
+
+    async def _co_allcols(self, t: str) -> bool:
+        """Nguon co nhom log ALL COLUMN LOGGING cho bang? Doc TU DIEN DB, khong
+        tin vao chu GGSCI in ra."""
+        return bool(await self.ora.scalar(
+            "SELECT COUNT(*) FROM dba_log_groups@DBL_PMNV WHERE owner=:o"
+            " AND table_name=:t AND log_group_type='ALL COLUMN LOGGING'",
+            o=SCHEMA_SOURCE, t=check_ident(t)))
+
+    async def _add_trandata_log(self, run: dict) -> dict:
+        o, t = run["src_owner"], run["src_table"]
+        if await self._co_allcols(t):
+            self.con.execute("UPDATE managed_log SET prepared=1, updated_at=?"
+                             " WHERE src_table=?", (int(time.time()), t))
+            return {"msg": f"{o}.{t} ĐÃ có nhóm log ALL COLUMN LOGGING - không làm lại",
+                    "output": ["dba_log_groups: ALL COLUMN LOGGING = có"]}
+        ok, lines = await gg.add_trandata(self.cfg, o, t, allcols=True)
+        if not await self._co_allcols(t):
+            raise WizardError(
+                f"Đã chạy `add trandata {o}.{t} allcols` nhưng DB nguồn VẪN KHÔNG có nhóm "
+                "log ALL COLUMN LOGGING (hay gặp khi bảng đã bật TRANDATA từ trước cho "
+                "luồng thường). Công cụ KHÔNG tắt TRANDATA cũ - làm vậy là hỏng luồng "
+                "thường đang chạy. Nhờ DBA nguồn chạy lệnh dưới đây (chỉ CỘNG THÊM một "
+                "nhóm log, không gỡ gì) rồi bấm lại bước này:\n"
+                f"  ALTER TABLE {o}.{t} ADD SUPPLEMENTAL LOG DATA (ALL) COLUMNS;")
+        self.con.execute("UPDATE managed_log SET prepared=1, updated_at=?"
+                         " WHERE src_table=?", (int(time.time()), t))
+        return {"msg": f"Đã bật TRANDATA ALLCOLS cho {o}.{t} (dba_log_groups: ALL COLUMN "
+                       "LOGGING = có)", "output": lines}
+
+    async def _kiem_bang_log(self, run: dict, tt: str) -> list[str]:
+        """Bang _LOG: du 3 cot log, KHONG khoa chinh / duy nhat, cot nguon NULL."""
+        from .ddl import COT_LOG
+        o = run["tgt_owner"]
+        cot = {r["column_name"]: r for r in await self.ora.rows(
+            "SELECT column_name, nullable FROM dba_tab_columns"
+            " WHERE owner=:o AND table_name=:t", o=o, t=tt)}
+        thieu = [c for c, _, _ in COT_LOG if c not in cot]
+        if thieu:
+            raise WizardError(f'Bảng log {o}."{tt}" thiếu cột: {", ".join(thieu)}.')
+        n_k = await self.ora.scalar(
+            "SELECT COUNT(*) FROM dba_constraints WHERE owner=:o AND table_name=:t"
+            " AND constraint_type IN ('P','U')", o=o, t=tt)
+        n_i = await self.ora.scalar(
+            "SELECT COUNT(*) FROM dba_indexes WHERE table_owner=:o AND table_name=:t"
+            " AND uniqueness='UNIQUE'", o=o, t=tt)
+        if n_k or n_i:
+            raise WizardError(
+                f'Bảng log {o}."{tt}" có {n_k} ràng buộc khoá chính/duy nhất và {n_i} index '
+                "duy nhất. Bảng log ghi CÙNG một khoá nhiều lần - Replicat sẽ ABEND ngay "
+                "lần thứ hai dòng đó bị sửa. Bỏ các khoá đó rồi bấm lại.")
+        nn = sorted(c for c, r in cot.items() if r["nullable"] == "N" and c != "LOG_TIME")
+        if nn:
+            raise WizardError(
+                f'Bảng log {o}."{tt}" có cột NOT NULL: {", ".join(nn[:8])}. Bỏ NOT NULL - '
+                "một bản ghi thiếu giá trị ở cột đó sẽ làm Replicat ABEND.")
+        return ["bảng log: đủ LOG_TYPE / COMMIT_TS / LOG_TIME, không khoá chính/duy "
+                "nhất, các cột nguồn cho phép NULL"]
+
+    async def _b_kiem_chung_log(self, run: dict, ts: dict) -> dict:
+        et, rep, _ = self._proc(run)
+        out = []
+        for proc in (et, rep):
+            st = await gg.status_of(self.cfg, proc)
+            if not st or not st.is_running:
+                raise WizardError(f"{proc} không chạy: {st.status if st else 'không thấy'}")
+            out.append(f"{proc} RUNNING chậm {st.lag_s}s")
+        if not self._co_dong(et, run, "TABLE") or not self._co_dong(rep, run, "MAP"):
+            raise WizardError("Thiếu dòng TABLE hoặc MAP của bảng trong file tham số.")
+        dong = [l for l in paramsmod.read(self.cfg, rep).text.splitlines()
+                if paramsmod._re_map(run["src_owner"], run["src_table"]).match(l)]
+        if not dong or "INSERTALLRECORDS" not in dong[0].upper():
+            raise WizardError("Dòng MAP của bảng không có INSERTALLRECORDS - đây không "
+                              "phải dòng MAP của luồng log.")
+        self.con.execute(
+            "UPDATE managed_log SET stream=?, in_extract=1, has_map=1, note=NULL,"
+            " updated_at=? WHERE src_table=?",
+            (run["stream"], int(time.time()), run["src_table"]))
+        out += ["dòng MAP: INSERTALLRECORDS - có",
+                "", "Log bắt đầu từ lúc này: các dòng ĐÃ CÓ trong bảng nguồn trước đó "
+                "không nằm trong bảng log."]
+        return {"msg": f"{run['src_table']} đã ghi log vào {run['tgt_owner']}."
+                       f"{run['tgt_table']} (luồng {run['stream']})", "output": out}
+
+    # =================================================================
+    # ADD_TABLE buoc 1 - dang ky (ca lo) vao danh sach quan ly
+    # =================================================================
+    async def _b_dang_ky_bang(self, run: dict, ts: dict) -> dict:
+        """Dua MOI bang cua phien vao danh sach quan ly, gan luong cua phien.
+
+        Yeu cau nguoi dung 2026-10-20: thao tac nhanh "Them bang" tu choi
+        bang chua dang ky va bat qua trang Quy trinh - mot buoc tay thua. Giong
+        `_b_ns_dang_ky_bang` cua LUONG_MOI, khac o cho luong DA CO nen gan luon.
+
+        KHONG nam trong MOI_BANG: cac buoc moi-bang doc dong registry qua
+        `_run_bang`, ma dong do chua co - buoc nay tu lap qua ca lo.
+        Chot giu nguyen: bang phai co THAT o nguon; bang da thuoc luong KHAC
+        thi dung. Chay lai duoc.
+        """
+        if run["kind"] in KIND_LOG:
+            return await self._dang_ky_log(run)
+        out: list[str] = []
+        moi = 0
+        for b in self._cac_bang(run):
+            tb = check_ident(b.upper())
+            if not await self.ora.scalar(
+                    "SELECT COUNT(*) FROM dba_tables@DBL_PMNV"
+                    " WHERE owner=:o AND table_name=:t", o=SCHEMA_SOURCE, t=tb):
+                raise WizardError(
+                    f"{SCHEMA_SOURCE}.{tb} KHÔNG tồn tại ở nguồn. Danh sách quản lý chỉ "
+                    "nhận bảng có thật ở nguồn - đó là chốt chặn cuối chống SQL "
+                    "injection, không phải một ô nhập tự do.")
+            cu = self.con.execute(
+                "SELECT stream FROM managed_table WHERE src_table=?", (tb,)).fetchone()
+            if cu is None:
+                self.con.execute(
+                    "INSERT INTO managed_table(src_owner,src_table,tgt_owner,tgt_table,"
+                    "stream,in_extract,has_map,prepared,handlecollisions,note,updated_at)"
+                    " VALUES (?,?,?,?,?,0,0,0,0,?,?)",
+                    (SCHEMA_SOURCE, tb, SCHEMA_TARGET, tb, run["stream"],
+                     f"đăng ký bởi quy trình thêm bảng #{run['id']}", int(time.time())))
+                out.append(f"{tb}: tồn tại ở nguồn - ĐÃ đăng ký vào luồng {run['stream']}")
+                moi += 1
+            elif cu["stream"] and cu["stream"] != run["stream"]:
+                raise WizardError(
+                    f"{tb}: danh sách quản lý ghi bảng này thuộc luồng {cu['stream']}, "
+                    f"không phải {run['stream']}.")
+            elif not cu["stream"]:
+                self.con.execute(
+                    "UPDATE managed_table SET stream=?, updated_at=? WHERE src_table=?",
+                    (run["stream"], int(time.time()), tb))
+                out.append(f"{tb}: đã có trong danh sách, chưa gắn luồng - gắn vào "
+                           f"{run['stream']}")
+            else:
+                out.append(f"{tb}: đã có trong danh sách quản lý, luồng {run['stream']}")
+        return {"msg": (f"Đã đăng ký {moi} bảng mới vào danh sách quản lý" if moi
+                        else "Mọi bảng đã có trong danh sách quản lý"),
+                "output": out}
+
+    # =================================================================
+    # GO_BANG - go mot bang khoi luong dang chay
+    # =================================================================
+    def _moc_go(self, run: dict) -> dict:
+        ctx = json.loads(run.get("ctx_json") or "{}")
+        moc = ctx.get("moc_go")
+        if not moc:
+            raise WizardError("Chưa có mốc (bước 3) - không biết phải chờ Replicat áp tới đâu.")
+        return moc
+
+    def _co_dong(self, proc: str, run: dict, loai: str) -> bool:
+        txt = paramsmod.read(self.cfg, proc).text
+        pat = (paramsmod._re_table if loai == "TABLE" else paramsmod._re_map)(
+            run["src_owner"], run["src_table"])
+        return any(pat.match(l) for l in txt.splitlines())
+
+    async def _b_kiem_tra_go(self, run: dict, ts: dict) -> dict:
+        et, rep, _ = self._proc(run)
+        co_tab = self._co_dong(et, run, "TABLE")
+        co_map = self._co_dong(rep, run, "MAP")
+        out = [f"{et}.prm: dòng TABLE {'CÓ' if co_tab else 'không có'}",
+               f"{rep}.prm: dòng MAP {'CÓ' if co_map else 'không có'}"]
+        if not co_tab and not co_map:
+            raise WizardError(f"{run['src_table']} không có dòng TABLE lẫn MAP trong luồng "
+                              f"{run['stream']} - không có gì để gỡ.")
+        n_tab = gg.count_param_entries(self.cfg, et, "TABLE")
+        out.append(f"{et} đang có {n_tab} dòng TABLE")
+        if co_tab and n_tab <= 1:
+            raise WizardError(
+                f"{run['src_table']} là bảng CUỐI CÙNG của {et}. Bỏ nó thì Extract không còn "
+                "bảng nào - đó là gỡ cả luồng, không phải gỡ một bảng.")
+        if not co_tab:
+            out.append("dòng TABLE đã được bỏ từ trước (phiên dở dang) - các bước sau tự bỏ "
+                       "qua phần đã làm")
+        for proc in (et, rep):
+            st = await gg.status_of(self.cfg, proc)
+            if not st or not st.is_running:
+                raise WizardError(f"{proc} đang {st.status if st else 'không thấy'} - chỉ gỡ "
+                                  "bảng khi cả Extract và Replicat đang chạy khoẻ.")
+            out.append(f"{proc} RUNNING chậm {st.lag_s}s")
+            if proc == rep and (st.lag_s or 0) > 60:
+                raise WizardError(f"{rep} đang chậm {st.lag_s}s - chờ nó bắt kịp rồi gỡ.")
+        return {"msg": f"Đủ điều kiện gỡ {run['src_table']} khỏi luồng {run['stream']}",
+                "output": out}
+
+    async def _b_ghi_moc_trail(self, run: dict, ts: dict) -> dict:
+        import re as _re
+        et, rep, tr = self._proc(run)
+        st = await gg.status_of(self.cfg, et)
+        if st is None or st.is_running:
+            raise WizardError(f"{et} phải đang DỪNG mới ghi được mốc cuối.")
+        d = await gg.detail(self.cfg, et)
+        scn = int(d.get("read_scn") or 0)
+        if not scn:
+            raise WizardError(f"Không đọc được SCN mà {et} đã đọc tới - không có mốc thì "
+                              "không biết phải chờ Replicat áp tới đâu.")
+        mau = _re.compile(rf"^{_re.escape(tr)}\d{{9}}$")
+        tep = sorted(f for f in (self.cfg.gg_home / "dirdat").iterdir() if mau.match(f.name))
+        if not tep:
+            raise WizardError(f"Không thấy file trail {tr}* nào.")
+        f = tep[-1]
+        moc = {"scn": scn, "file": str(f), "seqno": int(f.name[-9:]),
+               "size": f.stat().st_size}
+        ctx = json.loads(run.get("ctx_json") or "{}")
+        ctx["moc_go"] = moc
+        self._ghi_run(run["id"], ctx_json=json.dumps(ctx, ensure_ascii=False))
+        return {"msg": f"Mốc: {et} đã đọc tới SCN {scn:,}; cuối trail {f.name} RBA "
+                       f"{moc['size']:,}",
+                "output": [f"read_scn = {scn}", f"trail cuối = {f}", f"kích thước = {moc['size']}"]}
+
+    def _da_doc_qua_moc(self, d: dict, moc: dict) -> bool:
+        from pathlib import Path
+        f, rba = d.get("read_file"), d.get("rba")
+        if not f or rba is None:
+            return False
+        so = Path(f).name[-9:]
+        if not so.isdigit():
+            return False
+        return int(so) > moc["seqno"] or (int(so) == moc["seqno"]
+                                          and int(rba) >= moc["size"])
+
+    async def _b_bo_table(self, run: dict, ts: dict) -> dict:
+        et, _, _ = self._proc(run)
+        cur = paramsmod.read(self.cfg, et)
+        moi = paramsmod.bo_dong_table(cur.text, run["src_owner"], run["src_table"])
+        if moi != cur.text:
+            r = await self._ghi_param_bo(run, et, moi, ts, "bỏ TABLE", None)
+        else:
+            r = {"msg": f"dòng TABLE của {run['src_table']} đã không còn - không làm lại",
+                 "output": []}
+        self.con.execute(f"UPDATE {self._bang_qly(run)} SET in_extract=0, updated_at=?"
+                         " WHERE src_table=?", (int(time.time()), run["src_table"]))
+        return r
+
+    async def _xt_bo_table(self, run: dict) -> str:
+        et, _, _ = self._proc(run)
+        return self._xt_bo(et, run, "TABLE")
+
+    async def _xt_bo_map(self, run: dict) -> str:
+        _, rep, _ = self._proc(run)
+        return self._xt_bo(rep, run, "MAP")
+
+    def _xt_bo(self, proc: str, run: dict, loai: str) -> str:
+        txt = paramsmod.read(self.cfg, proc).text
+        pat = (paramsmod._re_table if loai == "TABLE" else paramsmod._re_map)(
+            run["src_owner"], run["src_table"])
+        dong = [l for l in txt.splitlines() if pat.match(l)]
+        if not dong:
+            return f"# {proc}.prm: dòng {loai} của {run['src_table']} đã không còn"
+        return f"# {proc}.prm - bỏ đúng một dòng:\n- " + "\n- ".join(dong)
+
+    async def _ghi_param_bo(self, run: dict, proc: str, moi: str, ts: dict,
+                            nhan: str, extract_cap_doi: str | None) -> dict:
+        r = await paramsmod.save(
+            self.cfg, self.con, proc, moi,
+            who=ts.get("who", "wizard"),
+            reason=ts.get("reason", f"quy trình #{run['id']} {nhan}"),
+            cho_phep_bo=(run["src_owner"], run["src_table"]),
+            extract_cap_doi=extract_cap_doi)
+        st = r["stats"]
+        return {"msg": f"Đã ghi {proc}.prm (bỏ {st['xoa']} dòng, TABLE "
+                       f"{st['table_truoc']}->{st['table_sau']}, MAP "
+                       f"{st['map_truoc']}->{st['map_sau']}), kiểm cú pháp đạt",
+                "output": [f"backup: {r['backup']}"] + r["checkprm_lines"]}
+
+    async def _b_cho_ap_het(self, run: dict, ts: dict) -> dict:
+        from pathlib import Path
+        _, rep, _ = self._proc(run)
+        moc = self._moc_go(run)
+        giu: dict = {}
+
+        async def do() -> tuple[bool, str]:
+            st = await gg.status_of(self.cfg, rep)
+            if not st or not st.is_running:
+                giu.clear()
+                return False, f"{rep} {st.status if st else '?'}"
+            d = await gg.detail(self.cfg, rep)
+            doc = self._da_doc_qua_moc(d, moc)
+            ok, mo_ta = self._qua_moc_nap(d, moc["scn"])
+            vi_tri = (f"đọc {Path(d.get('read_file') or '?').name} RBA {d.get('rba')}"
+                      f" / mốc {Path(moc['file']).name} RBA {moc['size']:,}")
+            if doc and ok:
+                return True, f"{mo_ta}; {vi_tri}"
+            if doc and ok is None:
+                n = self._giu_yen(giu, d)
+                return n >= 30, f"{mo_ta}; {vi_tri}; trail đứng yên {n}s/30s"
+            if doc and self._doc_het_trail(d):
+                # Duong thu ba: luong VANG, High WM dung duoi moc (phien #10).
+                xong, mt = await self._qua_ap_rong(run, moc["scn"], giu, d)
+                return xong, f"{mt}; {vi_tri}"
+            giu.clear()
+            return False, f"{mo_ta}; {vi_tri}"
+
+        # Bang dang go da mat dong TABLE: update no khong vao trail, nen goi y
+        # phai chon bang KHAC cua luong.
+        boc, goi_y = self._boc_cho(run, "CHO_AP_HET", do, set(self._cac_bang(run)))
+        r = await cho.cho_den(boc, tran_s=1200, nhan=f"{rep} áp hết tới mốc gỡ")
+        if not r["xong"]:
+            raise WizardError(
+                f"{rep} chưa áp hết tới mốc gỡ sau {cho.gio_gon(r['giay'])} ({r['cuoi']}). "
+                "Dòng TABLE đã bỏ và Extract đang chạy - luồng vẫn an toàn; mở lại quy "
+                "trình sau để chạy tiếp, chưa bỏ dòng MAP."
+                + (" Luồng vắng: xem lệnh gợi ý trong kết quả bước." if goi_y else ""))
+        return {"msg": f"{r['cuoi']} - sau {cho.gio_gon(r['giay'])}",
+                "output": goi_y + r["output"]}
+
+    async def _b_bo_map(self, run: dict, ts: dict) -> dict:
+        et, rep, _ = self._proc(run)
+        moc = self._moc_go(run)
+        if self._co_dong(et, run, "TABLE"):
+            raise WizardError(f"{et} VẪN còn dòng TABLE {run['src_table']} - không được bỏ MAP "
+                              "(mất dữ liệu im lặng). Bỏ TABLE trước.")
+        # KIEM LAI luc Replicat da dung: vi tri no se chay lai tu do phai qua moc.
+        d = await gg.detail(self.cfg, rep)
+        ok, mo_ta = self._qua_moc_nap(d, moc["scn"])
+        if ok is False and self._da_ap_rong_truoc(run, moc["scn"]):
+            ok, mo_ta = None, self._mo_ta_ap_rong(run)
+        if ok is False or not self._da_doc_qua_moc(d, moc):
+            raise WizardError(f"{mo_ta}: chưa áp hết tới mốc gỡ (SCN {moc['scn']:,}). Bỏ MAP "
+                              "lúc này là bỏ qua các giao dịch chưa áp của bảng. Chạy lại "
+                              "Replicat, chờ thêm.")
+        cur = paramsmod.read(self.cfg, rep)
+        moi = paramsmod.bo_dong_map(cur.text, run["src_owner"], run["src_table"])
+        if moi != cur.text:
+            r = await self._ghi_param_bo(run, rep, moi, ts, "bỏ MAP",
+                                         paramsmod.read(self.cfg, et).text)
+        else:
+            r = {"msg": f"dòng MAP của {run['src_table']} đã không còn - không làm lại",
+                 "output": []}
+        r["output"].insert(0, f"{mo_ta} - đủ điều kiện bỏ MAP")
+        self.con.execute(f"UPDATE {self._bang_qly(run)} SET has_map=0, handlecollisions=0,"
+                         " updated_at=? WHERE src_table=?",
+                         (int(time.time()), run["src_table"]))
+        return r
+
+    async def _b_kiem_chung_go(self, run: dict, ts: dict) -> dict:
+        et, rep, _ = self._proc(run)
+        out = []
+        for proc in (et, rep):
+            st = await gg.status_of(self.cfg, proc)
+            if not st or not st.is_running:
+                raise WizardError(f"{proc} không chạy: {st.status if st else 'không thấy'}")
+            out.append(f"{proc} RUNNING chậm {st.lag_s}s")
+        if self._co_dong(et, run, "TABLE") or self._co_dong(rep, run, "MAP"):
+            raise WizardError("Vẫn còn dòng TABLE hoặc MAP của bảng trong file tham số.")
+        out.append("không còn dòng TABLE / MAP của bảng")
+        self.con.execute(
+            f"UPDATE {self._bang_qly(run)} SET stream=NULL, in_extract=0, has_map=0,"
+            " handlecollisions=0, note=?, updated_at=? WHERE src_table=?",
+            (f"đã gỡ khỏi luồng {run['stream']} bởi quy trình #{run['id']} - TRANDATA ở "
+             "nguồn vẫn bật, dữ liệu ở đích giữ nguyên",
+             int(time.time()), run["src_table"]))
+        out += ["",
+                f"Danh sách quản lý: {run['src_table']} trở lại «chưa thuộc luồng nào».",
+                "CỐ Ý KHÔNG LÀM (để người quyết): tắt TRANDATA ở nguồn, và xoá bảng / dữ "
+                "liệu ở đích (dữ liệu dừng ở thời điểm gỡ).",
+                "Trang đối chiếu sẽ ghi bảng này vào nhóm «đã bật TRANDATA nhưng Extract "
+                "không lấy» cho tới khi TRANDATA được tắt."]
+        return {"msg": f"Đã gỡ {run['src_table']} khỏi luồng {run['stream']}", "output": out}
+
+    # =================================================================
     # BUOC param
     # =================================================================
     def _them_hc(self, text: str, run: dict) -> str:
@@ -1292,8 +1992,21 @@ class Wizard(IndexMixin):
 
     async def _b_them_map(self, run: dict, ts: dict) -> dict:
         _, rep, _ = self._proc(run)
+        if run["kind"] == "THEM_LOG":
+            # Dong MAP log: INSERTALLRECORDS, khong KEYCOLS (chi INSERT), khong
+            # che do chong trung (khong co dot nap nao de chong lan).
+            cur = paramsmod.read(self.cfg, rep)
+            moi = paramsmod.them_dong_map_log(cur.text, run["src_owner"], run["src_table"],
+                                              run["tgt_owner"], run["tgt_table"])
+            if moi == cur.text:
+                return {"msg": f"dòng MAP log cho {run['src_table']} ĐÃ có - không làm lại",
+                        "output": []}
+            r = await self._ghi_param(run, rep, moi, ts, "them MAP log")
+            self.con.execute("UPDATE managed_log SET has_map=1, updated_at=?"
+                             " WHERE src_table=?", (int(time.time()), run["src_table"]))
+            return r
         if not run["keycols"]:
-            raise WizardError("Chưa xác nhận cột khoá (bước 2)")
+            raise WizardError("Chưa xác nhận cột khoá (bước xác nhận cột khoá)")
         cur = paramsmod.read(self.cfg, rep)
         moi = paramsmod.them_dong_map(
             cur.text, run["src_owner"], run["src_table"],
@@ -1314,7 +2027,7 @@ class Wizard(IndexMixin):
         if moi == cur.text:
             return {"msg": f"dòng TABLE cho {run['src_table']} ĐÃ có", "output": []}
         r = await self._ghi_param(run, et, moi, ts, "them TABLE")
-        self.con.execute("UPDATE managed_table SET in_extract=1, updated_at=?"
+        self.con.execute(f"UPDATE {self._bang_qly(run)} SET in_extract=1, updated_at=?"
                          " WHERE src_table=?", (int(time.time()), run["src_table"]))
         return r
 
@@ -1336,12 +2049,16 @@ class Wizard(IndexMixin):
             raise WizardError("Chưa có mốc nạp - đợt nạp chưa xong")
         _, rep, _ = self._proc(run)
         d = await gg.detail(self.cfg, rep)
-        low = int(d.get("low_wm") or 0)
-        if low <= int(run["maxscn"]):
+        # CUNG dinh nghia voi buoc 25 (`_qua_moc_nap`). Phien #7: chot cu chi
+        # doc Low WM, ma Low WM cua luong moi it giao dich la "(no data)" ->
+        # FAIL o day sau khi buoc 25 da cho qua -> tu don ca luong.
+        ok, mo_ta = self._qua_moc_nap(d, int(run["maxscn"]))
+        if ok is False and self._da_ap_rong_truoc(run, int(run["maxscn"])):
+            ok, mo_ta = None, self._mo_ta_ap_rong(run)
+        if ok is False:
             raise WizardError(
-                f"Mốc đã áp ({low:,}) chưa vượt mốc nạp ({int(run['maxscn']):,}). Bỏ chế "
-                "độ chống trùng lúc này là mất khả năng chống trùng cho phần dữ liệu "
-                "còn đang chờ áp. Chờ thêm.")
+                f"{mo_ta}: chưa vượt. Bỏ chế độ chống trùng lúc này là mất khả năng "
+                "chống trùng cho phần dữ liệu còn đang chờ áp. Chờ thêm.")
         cur = paramsmod.read(self.cfg, rep)
         moi = paramsmod.bo_handlecollisions(cur.text, run["src_owner"],
                                             run["src_table"])
@@ -1351,7 +2068,7 @@ class Wizard(IndexMixin):
         self.con.execute("UPDATE managed_table SET handlecollisions=0,"
                          " updated_at=? WHERE src_table=?",
                          (int(time.time()), run["src_table"]))
-        r["output"].insert(0, f"Low WM {low:,} > MAXSCN {int(run['maxscn']):,} - du dieu kien")
+        r["output"].insert(0, f"{mo_ta} - đủ điều kiện")
         return r
 
     # =================================================================
@@ -1376,10 +2093,45 @@ class Wizard(IndexMixin):
         return {"msg": f"{et} đã bắt kịp sau {cho.gio_gon(r['giay'])} "
                        f"({r['cuoi']})", "output": r["output"]}
 
+    async def _scn_extract_da_doc(self, et: str) -> tuple[int | None, str]:
+        """SCN Extract DA DOC TOI (`send extract, status`), chi khi het recovery.
+
+        Dang recovery thi vi tri doc con LUI ve giao dich mo luc stop - lay
+        luc do la lay mot moc chua phu bang moi. Tra (None, ly do) neu chua.
+        """
+        import re
+        _, lines = await gg.run(self.cfg, f"send extract {gg.check_arg(et)}, status",
+                                timeout=60)
+        txt = "\n".join(lines)
+        if "Recovery complete" not in txt:
+            st = re.search(r"Current status:\s*(.+)", txt)
+            return None, f"{et} chưa hết recovery ({st.group(1).strip() if st else '?'})"
+        m = re.search(r"Current read position:.*?SCN:\s*[\d.]+\s*\((\d+)\)", txt, re.S)
+        if not m:
+            return None, f"không đọc được SCN đang đọc của {et}"
+        return int(m.group(1)), f"{et} Recovery complete, đã đọc tới SCN {int(m.group(1)):,}"
+
     async def _b_scn_floor(self, run: dict, ts: dict) -> dict:
-        _, rep, _ = self._proc(run)
+        et, rep, _ = self._proc(run)
         d = await gg.detail(self.cfg, rep)
         hi = d.get("high_wm")
+        if not hi and not any(d.get(k) for k in ("low_wm", "log_bsn")):
+            # Replicat CHUA TUNG AP giao dich nao (luong moi, bang vang - lo dau
+            # cua PMNV3, phien #21 2026-10-23): DB khong co moc nao de in. Lay
+            # SCN Extract DA DOC TOI sau khi bat kip. Moc nay >= moi High WM co
+            # the co (Replicat khong ap duoc thu Extract chua doc) nen chan duoi
+            # CHAT HON, khong long hon. Cung tinh than `_b_ns_scn_floor` dung
+            # register_scn cho Replicat chua tung chay.
+            scn, ly_do = await self._scn_extract_da_doc(et)
+            if scn:
+                self._ghi_run(run["id"], scn_floor=scn,
+                              trail_seqno=None, trail_rba=None)
+                return {"msg": f"Ngưỡng dưới = {scn:,} ({rep} chưa từng áp giao dịch "
+                               f"nào nên không có High Watermark - lấy SCN {et} đã đọc tới)",
+                        "output": [f"{k} = {v}" for k, v in d.items()] + [ly_do]}
+            raise WizardError(
+                f"{rep} chưa từng áp giao dịch nào nên không có High Watermark, và "
+                f"chưa lấy được SCN thay thế: {ly_do}. Chạy lại bước này sau ít phút.")
         if not hi:
             raise WizardError(
                 "Không đọc được mốc High Watermark -> DỪNG. Ngưỡng dưới sai thì script "
@@ -1389,6 +2141,264 @@ class Wizard(IndexMixin):
                       trail_rba=int(d["rba"]) if d.get("rba") else None)
         return {"msg": f"Ngưỡng dưới = {int(hi):,} (mốc High Watermark của {rep})",
                 "output": [f"{k} = {v}" for k, v in d.items()]}
+
+    @staticmethod
+    def _doc_het_trail(d: dict) -> bool:
+        """Replicat da doc HET trail: RBA doc = kich thuoc file, va khong co
+        file trail so ke tiep."""
+        from pathlib import Path
+        f, rba = d.get("read_file"), d.get("rba")
+        if not f or rba is None:
+            return False
+        fp = Path(f)
+        if not fp.exists() or fp.stat().st_size != int(rba):
+            return False
+        ten, so = fp.name[:-9], fp.name[-9:]
+        if not so.isdigit():
+            return False
+        return not fp.with_name(f"{ten}{int(so) + 1:09d}").exists()
+
+    def _qua_moc_nap(self, d: dict, mx: int) -> tuple[bool | None, str]:
+        """MOT dinh nghia "phan chong lan da ap xong" cho CA buoc 25 lan 27.
+
+        Tra (True, ...)  : Low WM > moc nap - duong chuan.
+            (None, ...)  : Low WM "(no data)" nhung High WM > moc nap va da
+                           doc het trail - DAT neu giu duoc (buoc 25 doi
+                           giu 30s; buoc 27 chay SAU khi Replicat da dung
+                           em o buoc 26 nen nhan ngay).
+            (False, ...) : chua.
+        Ly do co duong thu hai: xem _b_cho_low_wm. Luong ban (Low WM co gia
+        tri) KHONG BAO GIO di duong do.
+        """
+        low = int(d.get("low_wm") or 0)
+        if low > mx:
+            return True, f"mốc đã áp {low:,} / mốc nạp {mx:,}"
+        high = int(d.get("high_wm") or 0)
+        # Low WM RONG (luong moi) hoac TRE MOT GIAO DICH (luong yen - Replicat
+        # integrated chi cong bo Low WM toi giao dich TRUOC giao dich moi
+        # nhat, phien #9). Ca hai deu chi DAT khi noi goi giu duoc 30 giay
+        # TRAIL DUNG YEN - xem `_giu_yen`.
+        if high > mx and self._doc_het_trail(d):
+            lw = "chưa công bố" if not low else f"{low:,} (trễ một giao dịch)"
+            return None, (f"Low WM {lw}; High WM {high:,} > mốc nạp {mx:,}, đã đọc "
+                          "hết trail")
+        return False, (f"mốc đã áp {low:,} / mốc nạp {mx:,}"
+                       + (f" (High WM {high:,})" if high else ""))
+
+    @staticmethod
+    def _giu_yen(giu: dict, d: dict) -> int:
+        """Dem so giay TRAIL DUNG YEN lien tuc (vi tri doc khong doi).
+
+        `giu` la dict cua noi goi, song qua cac lan hoi. Vi tri doc doi = co
+        du lieu moi -> dem lai tu 0. Day la cai lam cho duong phu cua
+        `_qua_moc_nap` KHONG BAO GIO dat tren mot luong ban.
+        """
+        vt = (d.get("read_file"), d.get("rba"))
+        if giu.get("vt") != vt:
+            giu["vt"], giu["tu"] = vt, time.monotonic()
+        return int(time.monotonic() - giu["tu"])
+
+    async def _ap_rong(self, run: dict, mx: int) -> tuple[bool, str]:
+        """Replicat da AP RONG moi thu truoc moc `mx` - KHONG can giao dich moi.
+
+        VI SAO CO DUONG NAY (phien #10, 2026-10-21; va #7, #8 truoc do): hai
+        duong cua `_qua_moc_nap` deu can Low WM hoac High WM VUOT moc. Hai moc
+        do la SCN cua giao dich DA AP, nen chi nhich khi CO giao dich moi cua
+        chinh cac bang trong luong. Luong vang (PMNV2: 2 bang) thi chung dung
+        yen o duoi moc mai mai - phien #10 dung 4 phut 42 giay o buoc 6, va
+        lan nao nguoi dung cung phai tu COMMIT o nguon cho qua.
+
+        Duong nay chung minh tu phia khac, bang ba su that khong phu thuoc
+        luong giao dich:
+          1. Extract da doc redo QUA moc: moi giao dich commit truoc moc da
+             nam trong trail. Checkpoint SCN cua Extract integrated tang theo
+             redo cua CA DB, ke ca khi bang cua luong khong co gi.
+          2. (noi goi kiem) Replicat da doc HET trail va vi tri doc dung yen.
+          3. Inbound server o dich RANH: coordinator IDLE, khong con giao dich
+             cho giao, moi apply server IDLE, so da nhan = so da xu ly.
+        Ca ba dung lien tuc 30 giay (noi goi giu bang `_giu_yen`) thi moi giao
+        dich truoc moc da ap xong.
+        """
+        et, rep, _ = self._proc(run)
+        p = await gg.status_of(self.cfg, rep)
+        if not (p and p.is_running):
+            return False, f"{rep} {p.status if p else '?'}"
+        de = await gg.detail(self.cfg, et)
+        scn_et = int(de.get("read_scn") or 0)
+        if scn_et <= mx:
+            return False, f"{et} mới đọc redo tới SCN {scn_et:,}, chưa qua mốc {mx:,}"
+        if self.ora is None:
+            return False, "không có kết nối DB đích để xem inbound server"
+        ten = f"OGG${rep}"
+        try:
+            r = await self.ora.one(SQL_INBOUND, a=ten)
+        except Exception as e:  # noqa: BLE001 - loi DB chi la "chua chung minh duoc"
+            return False, f"không đọc được trạng thái {ten}: {str(e).splitlines()[0][:150]}"
+        if not r:
+            return False, f"không thấy inbound server {ten} ở DB đích"
+        nhan = int(r["total_received"] or 0)
+        xu_ly = sum(int(r[k] or 0) for k in ("total_applied", "total_ignored",
+                                             "total_errors"))
+        ranh = (r["state"] == "IDLE" and not int(r["unassigned_complete_txns"] or 0)
+                and int(r["so_server"] or 0) > 0 and not int(r["server_ban"] or 0)
+                and xu_ly >= nhan)
+        mo_ta = (f"{et} đọc redo tới SCN {scn_et:,} > mốc {mx:,}; {ten} {r['state']}, "
+                 f"nhận {nhan} / xử lý {xu_ly} giao dịch, chờ giao "
+                 f"{r['unassigned_complete_txns']}, apply server bận "
+                 f"{r['server_ban']}/{r['so_server']}")
+        return ranh, mo_ta
+
+    async def _qua_ap_rong(self, run: dict, mx: int, giu: dict,
+                           d: dict) -> tuple[bool, str]:
+        """Mot luot hoi cua duong thu ba. Noi goi DA kiem doc het trail.
+
+        Dat thi ghi `ctx["ap_rong"]` - chot kiem lai luc Replicat da dung
+        (BO_MAP, BO_HANDLECOLLISIONS) khong xem duoc inbound server nua, nen
+        nhan bang chung nay thay cho Low WM.
+        """
+        rong, mo_ta = await self._ap_rong(run, mx)
+        if not rong:
+            giu.clear()
+            return False, mo_ta
+        n = self._giu_yen(giu, d)
+        if n < 30:
+            return False, f"{mo_ta}; đứng yên {n}s/30s"
+        ctx = json.loads(self.lay(run["id"])["ctx_json"] or "{}")
+        ctx["ap_rong"] = {"mx": int(mx), "luc": int(time.time()), "mo_ta": mo_ta}
+        self._ghi_run(run["id"], ctx_json=json.dumps(ctx, ensure_ascii=False))
+        return True, f"đã áp rỗng: {mo_ta}; đứng yên {n}s/30s"
+
+    def _da_ap_rong_truoc(self, run: dict, mx: int) -> bool:
+        """Buoc cho cua CHINH phien nay da chung minh ap rong toi DUNG moc `mx`."""
+        if not run.get("id") or self.con is None:
+            return False
+        ctx = json.loads(self.lay(run["id"])["ctx_json"] or "{}")
+        return (ctx.get("ap_rong") or {}).get("mx") == int(mx)
+
+    def _mo_ta_ap_rong(self, run: dict) -> str:
+        ctx = json.loads(self.lay(run["id"])["ctx_json"] or "{}")
+        a = ctx.get("ap_rong") or {}
+        luc = time.strftime("%H:%M:%S", time.localtime(a.get("luc", 0)))
+        return (f"bước chờ đã chứng minh áp rỗng tới mốc {a.get('mx', 0):,} "
+                f"lúc {luc} ({a.get('mo_ta', '')})")
+
+    # Cho bao lau ma chua qua thi hien lenh goi y. Luong ban thuong qua bang
+    # Low WM trong vai giay, nen toi day gan nhu chac la luong VANG.
+    GOI_Y_SAU_S = 60
+
+    def _boc_cho(self, run: dict, ten_buoc: str, do, bo: set[str]):
+        """Boc `do()` cua mot buoc cho moc nap.
+
+        Hai viec, ca hai chi de NGUOI DUNG THAY, khong doi dieu kien qua buoc:
+          1. Ghi tien do SONG vao `wizard_step.output` sau moi lan hoi. Truoc
+             day output chi ghi khi buoc xong, nen suot 20 phut cho khung
+             theo doi song (`/nhanh/song`) khong hien gi.
+          2. Qua GOI_Y_SAU_S giay chua xong thi chen (MOT lan) lenh no-op de
+             nguoi dung tu chay o nguon - xem `_goi_y_commit`.
+        Tra (ham_boc, goi_y) - `goi_y` la list, rong neu chua hien.
+        """
+        no = so_buoc(run.get("kind"), ten_buoc)
+        t0 = time.monotonic()
+        goi_y: list[str] = []
+        dong: list[str] = []
+
+        async def boc() -> tuple[bool, str]:
+            xong, mo_ta = await do()
+            troi = time.monotonic() - t0
+            if not xong and not goi_y and troi >= self.GOI_Y_SAU_S:
+                goi_y.extend(await self._goi_y_commit(run, bo, troi))
+            dong.append(f"{cho.gio_gon(troi)}: {mo_ta}")
+            del dong[:-12]
+            if no and run.get("id") and self.con is not None:
+                self._ghi_buoc(run["id"], no,
+                               output="\n".join(goi_y + ([""] if goi_y else []) + dong))
+            return xong, mo_ta
+
+        return boc, goi_y
+
+    async def _goi_y_commit(self, run: dict, bo: set[str], troi: float) -> list[str]:
+        """Lenh UPDATE no-op de NGUOI DUNG tu chay o NGUON khi luong vang ket.
+
+        VI SAO CHI IN, KHONG TU CHAY (nguoi dung chon 2026-10-22): nguon PMNV
+        la READ-ONLY tuyet doi voi cong cu (adapters/ora.py), cong cu khong co
+        tai khoan ghi o nguon. Phien #12 (2026-10-22): ETPMNV2 dung o SCN
+        449.548.191 < moc nap 449.576.349 suot 3 phut - duong ap rong khong
+        dung duoc vi chinh Extract cung khong nhich. Chi mot giao dich that
+        tren bang cua luong moi day duoc ca Extract lan Replicat qua moc.
+
+        Chon bang: bang cua phien truoc, roi cac bang khac cua luong (co ca
+        TABLE lan MAP), tru `bo` - GO_BANG da bo TABLE cua bang dang go nen
+        update no khong vao trail. Uu tien bang KHONG co trigger dang bat:
+        update no-op tren bang co trigger audit van sinh dong lich su that.
+        Cot: cot dau tien khong thuoc khoa, kieu don gian - update cot khoa ve
+        chinh no thi Replicat thay mot lenh doi khoa.
+
+        Moi loi o day chi lam goi y kem cu the hon; KHONG duoc lam hong buoc
+        cho (cho_den khong bat ngoai le tu do()).
+        """
+        o = run.get("src_owner") or SCHEMA_SOURCE
+        ung_vien: list[tuple[str, str]] = []
+        for b in self._cac_bang(run):
+            if b not in bo:
+                kc = None
+                if self.con is not None:
+                    r = self.con.execute(
+                        "SELECT keycols FROM managed_table WHERE src_table=?", (b,)).fetchone()
+                    kc = r[0] if r else None
+                ung_vien.append((b, kc or run.get("keycols") or ""))
+        if self.con is not None and run.get("stream"):
+            for r in self.con.execute(
+                    "SELECT src_table, keycols FROM managed_table WHERE stream=?"
+                    " AND in_extract=1 AND has_map=1 ORDER BY src_table",
+                    (run["stream"],)):
+                if r[0] not in bo and r[0] not in {x for x, _ in ung_vien}:
+                    ung_vien.append((r[0], r[1] or ""))
+
+        chon = None            # (bang, cot, so_trigger)
+        for b, kc in ung_vien[:6]:
+            khoa = {c.strip().strip('"').upper() for c in kc.split(",") if c.strip()}
+            try:
+                cot = await self.ora.rows(
+                    "SELECT column_name, data_type FROM dba_tab_cols@DBL_PMNV"
+                    " WHERE owner=:o AND table_name=:t AND virtual_column='NO'"
+                    " AND hidden_column='NO' AND identity_column='NO'"
+                    " ORDER BY column_id", o=o, t=b)
+                trg = int(await self.ora.scalar(
+                    "SELECT COUNT(*) FROM dba_triggers@DBL_PMNV WHERE table_owner=:o"
+                    " AND table_name=:t AND status='ENABLED'", o=o, t=b) or 0)
+            except Exception:  # noqa: BLE001 - chi la goi y
+                continue
+            c = next((x["column_name"] for x in cot
+                      if x["column_name"] not in khoa and khoa
+                      and str(x["data_type"]).split("(")[0] in
+                      ("DATE", "NUMBER", "VARCHAR2", "CHAR", "NVARCHAR2", "TIMESTAMP")),
+                     None)
+            if c is None:
+                continue
+            if chon is None or (chon[2] and not trg):
+                chon = (b, c, trg)
+            if not trg:
+                break
+
+        dau = [f"GỢI Ý - đã chờ {cho.gio_gon(troi)} mà mốc chưa qua: có thể luồng "
+               f"{run.get('stream') or ''} đang vắng, không có giao dịch mới ở nguồn.",
+               "Một giao dịch nhỏ trên bảng CỦA LUỒNG sẽ đẩy Extract và Replicat qua mốc. "
+               "Công cụ KHÔNG tự chạy (nguồn chỉ đọc) - chạy tay ở DB NGUỒN:"]
+        if chon is None:
+            return dau + [
+                f'  UPDATE {o}."<BẢNG CỦA LUỒNG>" SET "<CỘT KHÔNG PHẢI KHOÁ>" = '
+                '"<CỘT KHÔNG PHẢI KHOÁ>" WHERE ROWNUM = 1;',
+                "  COMMIT;",
+                "(không tự chọn được bảng/cột - chọn bảng không có trigger đang bật)"]
+        b, c, trg = chon
+        return dau + [
+            f'  UPDATE {o}."{b}" SET "{c}" = "{c}" WHERE ROWNUM = 1;',
+            "  COMMIT;",
+            (f"CẢNH BÁO: bảng {b} có {trg} trigger đang bật - update vẫn kích hoạt "
+             "trigger; kiểm trước khi chạy." if trg else
+             f"(bảng {b} không có trigger đang bật; cột {c} không thuộc khoá)"),
+            "Lệnh treo nghĩa là dòng đó đang bị khoá: huỷ rồi chạy lại. Bước chờ tự "
+            "qua khi mốc nhích, không cần bấm gì thêm."]
 
     async def _b_cho_low_wm(self, run: dict, ts: dict) -> dict:
         """Cho Low WM vuot MAXSCN.
@@ -1403,19 +2413,47 @@ class Wizard(IndexMixin):
         _, rep, _ = self._proc(run)
         mx = int(run["maxscn"])
 
+        # DUONG THU HAI, chi khi Low WM la "(no data)" (phien #7,
+        # 2026-10-20). Replicat integrated cua mot LUONG MOI voi bang it giao
+        # dich co the KHONG BAO GIO cong bo Low WM: da ap 1 update, High WM
+        # 380.939.029 > moc nap, ma Low WM van "(no data)". Buoc nay luc do
+        # cho het 20 phut roi FAIL -> che do nhanh tu don ca mot luong dang
+        # chay dung.
+        # Khi Low WM rong, coi la da ap het phan chong lan neu DONG THOI:
+        #   - High WM > moc nap,
+        #   - Replicat da doc HET trail (RBA doc = kich thuoc file, khong co
+        #     file trail moi hon),
+        #   - va hai dieu tren dung LIEN TUC it nhat 30 giay (giao dich da
+        #     gui sang inbound server co thoi gian commit).
+        # Luong ban (Low WM co gia tri) KHONG BAO GIO di duong nay. Va buoc
+        # VERIFY phia sau van doi chieu nguon/dich - day khong phai cho
+        # cuoi cung bat duoc sai lech.
+        giu: dict = {}
+
         async def do() -> tuple[bool, str]:
             d = await gg.detail(self.cfg, rep)
-            low = int(d.get("low_wm") or 0)
-            return low > mx, f"mốc đã áp {low:,} / mốc nạp {mx:,}"
+            ok, mo_ta = self._qua_moc_nap(d, mx)
+            if ok:
+                return True, mo_ta
+            if ok is None:
+                n = self._giu_yen(giu, d)
+                return n >= 30, f"{mo_ta}, trail đứng yên {n}s/30s"
+            if self._doc_het_trail(d):
+                # Duong thu ba: luong VANG, High WM dung duoi moc nap.
+                return await self._qua_ap_rong(run, mx, giu, d)
+            giu.clear()
+            return False, mo_ta
 
-        r = await cho.cho_den(do, tran_s=1200, nhan=f"{rep} mốc đã áp")
+        boc, goi_y = self._boc_cho(run, "CHO_LOW_WM", do, set())
+        r = await cho.cho_den(boc, tran_s=1200, nhan=f"{rep} mốc đã áp")
         if not r["xong"]:
             raise WizardError(
                 f"Mốc đã áp chưa vượt mốc nạp sau {cho.gio_gon(r['giay'])} "
                 f"({r['cuoi']}). Đừng chờ tiếp ở đây; mở lại quy trình sau - "
-                "tiến độ lưu ở server nên không mất gì.")
+                "tiến độ lưu ở server nên không mất gì."
+                + (" Luồng vắng: xem lệnh gợi ý trong kết quả bước." if goi_y else ""))
         return {"msg": f"{r['cuoi']} - đã vượt, sau "
-                       f"{cho.gio_gon(r['giay'])}", "output": r["output"]}
+                       f"{cho.gio_gon(r['giay'])}", "output": goi_y + r["output"]}
 
     # =================================================================
     # BUOC nap du lieu
@@ -1942,19 +2980,47 @@ EXIT
                        f"{r['tgt_count']:,}", "output": out}
 
     async def _b_verify(self, run: dict, ts: dict) -> dict:
-        r = await self.verifier.verify_table(
-            run["src_table"], scn=None, mode="LIVE", stream=run["stream"],
-            batch_id=None, who=ts.get("who", "wizard"))
-        if r.get("err"):
-            raise WizardError(f"Đối chiếu lỗi: {r['err']}")
-        out = [f"nguồn {r['src_count']:,} / đích {r['tgt_count']:,}",
-               f"checksum nguồn {r['src_hash']}", f"checksum đích  {r['tgt_hash']}",
-               f"số cột {r['col_count']}"]
+        # Che do LIVE dem DICH truoc roi NGUON: bang dang co giao dich lien
+        # tuc thi nguon hay hon dich 1-2 dong ma khong phai lech. Gap that
+        # 2026-10-23 o 4 bang PMNV3 (BH_2B_APIGCN, BH_HD_GOC_NB, BH_HT_SO_TT,
+        # BH_HD_TTRANG): dem lai vai giay sau la khop, discard sach. Vi vay
+        # lech thi DOI CHIEU LAI trong VERIFY_TRAN_S giay; chi ket luan LECH
+        # khi het tran ma lan nao cung lech.
+        kq: dict = {}
+
+        async def do() -> tuple[bool, str]:
+            r = await self.verifier.verify_table(
+                run["src_table"], scn=None, mode="LIVE", stream=run["stream"],
+                batch_id=None, who=ts.get("who", "wizard"))
+            if r.get("err"):
+                raise WizardError(f"Đối chiếu lỗi: {r['err']}")
+            kq.update(r)
+            return bool(r["matched"]), (
+                f"nguồn {r['src_count']:,} / đích {r['tgt_count']:,} "
+                + ("khớp" if r["matched"] else "lệch"))
+
+        c = await cho.cho_den(do, tran_s=VERIFY_TRAN_S,
+                              nhan=f"đối chiếu {run['src_table']}")
+        # Bang lon: MOT lan dem da qua tran (bang 12 trieu dong o lo 17 PMNV3
+        # mat 99 giay) -> cho_den chi kip hoi mot lan. Van phai doi chieu du VERIFY_TOI_THIEU lan; ban
+        # than lan dem dai da la khoang cho nen khong can ngu them.
+        while not c["xong"] and c["so_lan"] < VERIFY_TOI_THIEU:
+            c2 = await cho.cho_den(do, tran_s=0, nhan=f"đối chiếu {run['src_table']}",
+                                   ghi=c["output"])
+            c = dict(c2, so_lan=c["so_lan"] + c2["so_lan"],
+                     giay=c["giay"] + c2["giay"])
+        r = kq
+        out = (c["output"] if c["so_lan"] > 1 else []) + [
+            f"nguồn {r['src_count']:,} / đích {r['tgt_count']:,}",
+            f"checksum nguồn {r['src_hash']}", f"checksum đích  {r['tgt_hash']}",
+            f"số cột {r['col_count']}"]
         if run["rows_before_truncate"] is not None:
             out.append(f"số dòng trước khi xoá sạch: {int(run['rows_before_truncate']):,}")
         if not r["matched"]:
             raise WizardError(
-                f"VẪN LỆCH: nguồn {r['src_count']:,} so với đích {r['tgt_count']:,}. Lưu "
+                f"VẪN LỆCH sau {c['so_lan']} lần đối chiếu trong "
+                f"{cho.gio_gon(c['giay'])}: nguồn "
+                f"{r['src_count']:,} so với đích {r['tgt_count']:,}. Lưu "
                 "ý chế độ nhanh có thể báo lệch oan vì đích đang thay đổi - chạy đối "
                 "chiếu chế độ chuẩn để chốt.")
         return {"msg": f"KHỚP: {r['src_count']:,} dòng, checksum trùng",
@@ -1986,7 +3052,8 @@ EXIT
     async def _xt_ns_add_checkpointtable(self, run: dict) -> str:
         _, _, _, ck = self._ns_ten(run)
         return (f"dblogin useridalias {gg.ALIAS_TARGET}\n"
-                f"add checkpointtable {ck}")
+                f"add checkpointtable {ck}\n"
+                + _GHI_CHU_GRANT_CKPT.format(ck=ck))
 
     async def _xt_ns_register_extract(self, run: dict) -> str:
         et, _, _, _ = self._ns_ten(run)
@@ -2065,6 +3132,96 @@ EXIT
             raise WizardError("Điều kiện tiên quyết KHÔNG đạt:\n- " + "\n- ".join(loi))
         return {"msg": "Tien dieu kien dat", "output": out}
 
+    # ------------------------------------------- buoc rieng cua LUONG_MOI
+    async def _xt_ns_dang_ky_bang(self, run: dict) -> str:
+        tb = (run["src_table"] or "").upper()
+        return chr(10).join([
+            "-- kiem bang co THAT o nguon (chot chan cuoi, khong bo duoc)",
+            "SELECT COUNT(*) FROM dba_tables@DBL_PMNV",
+            f"  WHERE owner = '{SCHEMA_SOURCE}' AND table_name = '{tb}';",
+            "",
+            "-- ghi vao danh sach quan ly cua cong cu (SQLite, khong phai Oracle)",
+            "INSERT INTO managed_table(src_owner, src_table, tgt_owner, tgt_table,",
+            "                          stream, in_extract, has_map, prepared,",
+            "                          handlecollisions)",
+            f"  VALUES ('{SCHEMA_SOURCE}', '{tb}', '{SCHEMA_TARGET}', '{tb}',",
+            "          NULL, 0, 0, 0, 0);",
+            "",
+            "-- luong de RONG o day. Buoc DANG KY CAU HINH moi gan luong va dat co.",
+        ])
+
+    async def _b_ns_dang_ky_bang(self, run: dict, ts: dict) -> dict:
+        """Dua bang dau tien vao danh sach quan ly.
+
+        VI SAO BUOC NAY NAM TRONG QUY TRINH: xem khoi chu thich cua
+        LUONG_MOI o dau file. Ngan gon la mot vong khong the di - o dang ky
+        bang o trang Quy trinh bat chon mot luong DA CO trong app.toml,
+        nhung luong cua quy trinh nay chi ton tai tu buoc DANG_KY_CAU_HINH.
+
+        CAI KHONG DOI: bang phai co THAT o nguon KT_BSH. Registry la
+        allowlist lop 5 chong SQL injection, nen mot dong khong co bang that
+        dang sau se mo pham vi cho MOI buoc ve sau.
+
+        Dong moi ghi voi `stream = NULL` va ca ba co = 0 - dung su that luc
+        nay. Buoc DANG_KY_CAU_HINH moi gan luong va dat co.
+
+        Chay lai duoc: da co dong roi thi khong ghi lan hai.
+        """
+        if run["kind"] in KIND_LOG:
+            return await self._dang_ky_log(run)
+        tb = check_ident((run["src_table"] or "").upper())
+        out: list[str] = []
+
+        if not await self.ora.scalar(
+                "SELECT COUNT(*) FROM dba_tables@DBL_PMNV"
+                " WHERE owner=:o AND table_name=:t", o=SCHEMA_SOURCE, t=tb):
+            raise WizardError(
+                    f"{SCHEMA_SOURCE}.{tb} KHÔNG tồn tại ở nguồn. Danh sách quản lý chỉ "
+                "nhận bảng "
+                "có thật ở nguồn - đó là chốt chặn cuối chống SQL injection, không "
+                "phải một ô nhập tự do.")
+        out.append(f"nguồn {SCHEMA_SOURCE}.{tb}: tồn tại")
+
+        n_tgt = await self.ora.scalar(
+            "SELECT COUNT(*) FROM dba_tables WHERE owner=:o AND table_name=:t",
+            o=SCHEMA_TARGET, t=tb)
+        out.append("đích %s.%s: %s" % (SCHEMA_TARGET,
+            tb, "đã có" if n_tgt else "chưa có - bước TẠO BẢNG Ở ĐÍCH sẽ tạo"))
+
+        cu = self.con.execute(
+            "SELECT stream, in_extract, has_map FROM managed_table"
+            " WHERE src_table=?", (tb,)).fetchone()
+        if cu is None:
+            # `note` PHAI co: `registry.sync()` danh dau lai moi dong co
+            # `note IS NULL` va se ghi de dong vua tao neu de trong.
+            self.con.execute(
+                "INSERT INTO managed_table(src_owner,src_table,tgt_owner,tgt_table,"
+                "stream,in_extract,has_map,prepared,handlecollisions,note,updated_at)"
+                " VALUES (?,?,?,?,NULL,0,0,0,0,?,?)",
+                (SCHEMA_SOURCE, tb, SCHEMA_TARGET, tb,
+                 f"đăng ký bởi quy trình tạo luồng mới #{run['id']}"
+                 " - chưa thuộc luồng nào",
+                 int(time.time())))
+            out.append("đã thêm vào danh sách quản lý: luồng để rỗng, cả 3 cờ = 0")
+            msg = f"Đã đăng ký {SCHEMA_SOURCE}.{tb} vào danh sách quản lý"
+        else:
+            if cu["has_map"] or cu["in_extract"] or cu["stream"]:
+                raise WizardError(
+                    "Danh sách quản lý ghi %s thuộc luồng %s (TABLE %s, MAP %s). Bảng "
+                    "đầu tiên của luồng mới phải chưa thuộc luồng nào."
+                    % (tb, cu["stream"] or "(rỗng)",
+                       "có" if cu["in_extract"] else "chưa",
+                       "có" if cu["has_map"] else "chưa"))
+            out.append("đã có trong danh sách quản lý và chưa thuộc luồng nào "
+                       "- không ghi lại")
+            msg = f"{SCHEMA_SOURCE}.{tb} đã có trong danh sách quản lý"
+
+        out += ["",
+                "Luồng được gắn vào dòng này ở bước ĐĂNG KÝ CẤU HÌNH - lúc đó luồng "
+                "mới thực sự có trong conf/app.toml. Trước đó, bảng là «đã quản lý "
+                "nhưng chưa thuộc luồng nào», đúng như sự thật."]
+        return {"msg": msg, "output": out}
+
     # ---------------------------------------------------------- buoc 2
     async def _b_ns_kiem_ten(self, run: dict, ts: dict) -> dict:
         # Doc tu `ts` (nguoi go o man hinh buoc nay) HOAC tu dong run (che do
@@ -2128,9 +3285,31 @@ EXIT
     # ---------------------------------------------------------- buoc 4
     def _prm_extract(self, run: dict) -> str:
         et, _, pre, _ = self._ns_ten(run)
+        if run.get("kind") == "LUONG_LOG":
+            # LOGALLSUPCOLS: anh truoc DU moi cot (DELETE). UPDATERECORDFORMAT
+            # FULL: anh sau DU moi cot - va la DIEU KIEN cua INSERTALLRECORDS.
+            # Hai tham so ap cho CA Extract -> chi o luong log rieng.
+            # KHONG co DDL INCLUDE: TRUNCATE/DROP o nguon khong lan sang de
+            # xoa lich su o dich.
+            return f"""EXTRACT {et}
+USERIDALIAS {gg.ALIAS_SOURCE}
+EXTTRAIL {self.cfg.gg_home}/dirdat/{pre}
+TRANLOGOPTIONS INTEGRATEDPARAMS (max_sga_size 256, parallelism 2)
+LOGALLSUPCOLS
+UPDATERECORDFORMAT FULL
+REPORTCOUNT EVERY 30 MINUTES, RATE
+DISCARDFILE ./dirrpt/{et}.dsc, APPEND, MEGABYTES 100
+TABLE {run["src_owner"]}.{run["src_table"]};
+"""
+        # EXTTRAIL PHAI LA DUNG CHUOI da dang ky o `add exttrail` (buoc
+        # ADD_EXTTRAIL dung `{gg_home}/dirdat/<pre>`). GoldenGate so NGUYEN
+        # CHUOI: ghi `./dirdat/pa` trong khi dang ky `/u01/app/ogg/dirdat/pa`
+        # thi Extract ABEND ngay khi chay voi OGG-01044 "The trail
+        # './dirdat/pa' is not assigned to extract" - da xay ra o CA phien #6
+        # lan #7 (2026-10-20). Ba luong dang chay deu dung duong dan tuyet doi.
         return f"""EXTRACT {et}
 USERIDALIAS {gg.ALIAS_SOURCE}
-EXTTRAIL ./dirdat/{pre}
+EXTTRAIL {self.cfg.gg_home}/dirdat/{pre}
 TRANLOGOPTIONS INTEGRATEDPARAMS (max_sga_size 256, parallelism 2)
 REPORTCOUNT EVERY 30 MINUTES, RATE
 DISCARDFILE ./dirrpt/{et}.dsc, APPEND, MEGABYTES 100
@@ -2140,6 +3319,18 @@ TABLE {run["src_owner"]}.{run["src_table"]};
 
     def _prm_replicat(self, run: dict) -> str:
         et, rep, pre, ck = self._ns_ten(run)
+        if run.get("kind") == "LUONG_LOG":
+            # IGNOREUPDATEBEFORES: UPDATE chi ghi anh SAU (mot dong). Khong
+            # REPERROR DISCARD: loi thi ABEND - bo im lang mot dong lich su
+            # te hon la dung lai cho nguoi xu ly.
+            return f"""REPLICAT {rep}
+USERIDALIAS {gg.ALIAS_TARGET}
+DBOPTIONS INTEGRATEDPARAMS(max_sga_size 256)
+REPORTCOUNT EVERY 30 MINUTES, RATE
+DISCARDFILE ./dirrpt/{rep}.dsc, APPEND, MEGABYTES 100
+IGNOREUPDATEBEFORES
+{paramsmod.dong_map_log(run["src_owner"], run["src_table"], run["tgt_owner"], run["tgt_table"])}
+"""
         kc = f", KEYCOLS ({run['keycols']})" if run["keycols"] else ""
         return f"""REPLICAT {rep}
 USERIDALIAS {gg.ALIAS_TARGET}
@@ -2189,7 +3380,8 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
                    for l in lines):
             raise WizardError(f"Không xác nhận được bảng checkpoint {ck}:\n"
                               + "\n".join(lines[-6:]))
-        return {"msg": f"Đã tạo bảng checkpoint {ck}", "output": lines}
+        return {"msg": f"Đã tạo bảng checkpoint {ck}",
+                "output": lines + ["", *_GHI_CHU_GRANT_CKPT.format(ck=ck).splitlines()]}
 
     async def _b_ns_register_extract(self, run: dict, ts: dict) -> dict:
         """Buoc cham vao DB NGUON PRODUCTION.
@@ -2276,13 +3468,29 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
         return {"msg": f"{et} đã chạy", "output": lines}
 
     async def _b_ns_cho_bat_kip(self, run: dict, ts: dict) -> dict:
-        et, _, _, _ = self._ns_ten(run)
+        et, _, pre, _ = self._ns_ten(run)
+        # HAI DIEU KIEN THEM (phien #7, 2026-10-20): buoc nay tung cho qua
+        # sau 0,1 GIAY trong khi Extract chi RUNNING vai giay roi ABEND
+        # (OGG-01044). Mot lan thay "RUNNING lag 0" la chua du:
+        #   - phai thay RUNNING lien tuc it nhat 30 giay (Extract abend sau
+        #     khoang 9 giay ke tu luc gan vao logmining server);
+        #   - file trail dau tien `<pre>000000000` PHAI ton tai - Extract
+        #     khong mo duoc trail thi khong bao gio tao file do.
+        thay_chay: list[float] = []
 
         async def do() -> tuple[bool, str]:
             p = await gg.status_of(self.cfg, et)
             lag = p.lag_s if p else None
-            xong = bool(p and p.is_running and lag is not None and lag <= 10)
-            return xong, f"{et} {p.status if p else '?'} chậm {lag}s"
+            if not (p and p.is_running):
+                thay_chay.clear()
+                return False, f"{et} {p.status if p else '?'}"
+            if not thay_chay:
+                thay_chay.append(time.monotonic())
+            on_dinh = time.monotonic() - thay_chay[0]
+            co_trail = any((self.cfg.gg_home / "dirdat").glob(f"{pre}0*"))
+            xong = (lag is not None and lag <= 10 and on_dinh >= 30 and co_trail)
+            return xong, (f"{et} RUNNING chậm {lag}s, ổn định {int(on_dinh)}s, "
+                          f"trail {pre}*: {'có' if co_trail else 'CHƯA có'}")
 
         r = await cho.cho_den(do, tran_s=1200, nhan=f"{et} bắt kịp")
         if not r["xong"]:
@@ -2321,13 +3529,18 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
         tr = sorted((self.cfg.gg_home / "dirdat").glob(f"{pre}*"))
         out.append(f"trail: {', '.join(f.name for f in tr) or '(chưa có)'}")
 
-        toml = (f'\n[streams.{pre.upper()}]\n'
-                f'ten = "<mo ta luong>"\n'
-                f'extract = "{et}"\n'
-                f'replicat = "{rep}"\n'
-                f'trail = "{pre}"\n')
+        # LUONG_MOI / LUONG_LOG: in DUNG khoi da ghi len server (ma luong +
+        # mo ta that, va `loai = "log"` neu la luong log) de nguoi dung chep
+        # vao ban repo. NEW_STREAM (bam tay) chua co ma luong -> dung tien to.
+        from . import toml_ghi as _tg
+        if run["kind"] in ("LUONG_MOI", "LUONG_LOG"):
+            _sid, _ten = self._ns_ma_luong(run)
+            toml = _tg.khoi_streams(_sid, et, rep, pre, _ten,
+                                    loai="log" if run["kind"] == "LUONG_LOG" else "")
+        else:
+            toml = _tg.khoi_streams(pre.upper(), et, rep, pre, "<mo ta luong>")
         self._luu_script(f"wz{run['id']}_app_toml.txt", toml)
-        if run["kind"] != "LUONG_MOI":
+        if run["kind"] not in ("LUONG_MOI", "LUONG_LOG"):
             out += ["", "Thêm khối dưới đây vào conf/app.toml TRÊN SERVER rồi chạy `run.sh "
                         "restart` để công cụ bắt đầu theo dõi luồng mới.",
                     "Công cụ KHÔNG tự sửa app.toml: cấu hình trên server là nguồn sự thật, "
@@ -2375,7 +3588,8 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
         dong = [f"# Ghi THEM vao {self.cfg.app_toml} - luu ban cu truoc, ghi",
                 "# nguyen tu, roi DOC LAI doi chieu: "
                 f"{len(self.cfg.streams)} luong dang chay phai y nguyen."]
-        return chr(10).join(dong) + toml_ghi.khoi_streams(sid, et, rep, pre, ten)
+        return chr(10).join(dong) + toml_ghi.khoi_streams(
+            sid, et, rep, pre, ten, loai="log" if run["kind"] == "LUONG_LOG" else "")
 
     def _ns_ma_luong(self, run: dict) -> tuple[str, str]:
         """Ma luong trong app.toml + mo ta. Mac dinh ma = tien to trail."""
@@ -2403,16 +3617,18 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
 
         et, rep, pre, _ = self._ns_ten(run)
         sid, ten = self._ns_ma_luong(run)
-        r = toml_ghi.dang_ky_luong(self.cfg, sid, et, rep, pre, ten)
+        la_log = run["kind"] == "LUONG_LOG"
+        r = toml_ghi.dang_ky_luong(self.cfg, sid, et, rep, pre, ten,
+                                   loai="log" if la_log else "")
         self._ghi_run(run["id"], stream=sid)
 
         # Danh sach quan ly: bang nay tu gio thuoc luong moi. `in_extract` va
         # `has_map` dat 1 vi file tham so sinh o buoc TAO_PARAM DA co san ca
         # hai dong - khong phai mot lan doan.
         self.con.execute(
-            "UPDATE managed_table SET stream=?, in_extract=1, has_map=1,"
-            " handlecollisions=1, updated_at=? WHERE src_table=?",
-            (sid, int(time.time()), run["src_table"]))
+            f"UPDATE {self._bang_qly(run)} SET stream=?, in_extract=1, has_map=1,"
+            " handlecollisions=?, updated_at=? WHERE src_table=?",
+            (sid, 0 if la_log else 1, int(time.time()), run["src_table"]))
 
         # Kiem chung ngay: `_proc` phai tra ve bo ba, khong KeyError.
         p_et, p_rep, p_tr = self._proc({"stream": sid})
@@ -2491,7 +3707,7 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
         # app.toml ma process da bi xoa thi bo thu thap se bao dong gia va
         # `_proc()` cua cac duong khac van tro vao do. Go khong duoc thi
         # DUNG LAI, chua xoa gi ca - con sua duoc.
-        if run["kind"] == "LUONG_MOI" and run["stream"]:
+        if run["kind"] in ("LUONG_MOI", "LUONG_LOG") and run["stream"]:
             from . import toml_ghi
             try:
                 r_cfg = toml_ghi.bo_dang_ky_luong(self.cfg, run["stream"])
@@ -2507,7 +3723,7 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
         # Dung process truoc khi xoa
         for t in (rep, et):
             try:
-                ok, last, lines = await gg.stop_process(self.cfg, t)
+                ok, last, lines = await gg.stop_process(self.cfg, t, timeout_s=90)
                 buoc.append({"lenh": f"stop {t}", "ok": ok, "chi_tiet": last})
                 out += lines
             except Exception as e:                              # noqa: BLE001
@@ -2519,51 +3735,114 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
             (f"dblogin useridalias {gg.ALIAS_TARGET}\ndelete replicat {rep}",
              "delete replicat", True),
             (f"dblogin useridalias {gg.ALIAS_TARGET}\n"
-             f"delete checkpointtable {ck}", "delete checkpointtable", False),
+             # DAU `!` BAT BUOC: khong co no GGSCI HOI "Are you sure you want
+             # to delete this checkpoint table? [Y]es or [N]o", ma ggsci chay
+             # khong co ban phim -> cau hoi nhan `exit` roi EOF va ggsci LAP
+             # HOI VO TAN o 100% CPU. Goc cua ca hai `ggsci` treo trong su co
+             # #6 (15:43 va 16:06, 2026-10-20).
+             f"delete checkpointtable {ck} !", "delete checkpointtable", False),
             (f"dblogin useridalias {gg.ALIAS_SOURCE}\ndelete extract {et}",
              "delete extract", True),
             (f"dblogin useridalias {gg.ALIAS_SOURCE}\n"
              f"unregister extract {et} database", "unregister extract", True),
         ]
+        # TRAN 90 GIAY MOI LENH, khong phai 300.
+        #
+        # Su co 2026-10-20: mot lenh don treo o ggsci; voi tran 300 giay va
+        # bon lenh thi ca luot don co the keo 20 PHUT. Trong cua so do
+        # ggadmin bi khoi dong lai, tac vu don chet giua duong va de lai
+        # trang thai nua voi: cau hinh da go, Extract van con, phien van
+        # OPEN, va mot `ggsci` mo coi an 94% CPU. Lenh delete/unregister
+        # xong trong vai giay; 90 giay la rat rong roi, va treo thi phai LO
+        # RA SOM de nguoi con kip dọn tay.
         that_bai: list[str] = []
         for script, nhan, bat_buoc in day:
             try:
                 rc, lines = await gg.run_pham_vi(self.cfg, script, cp,
-                                                 timeout=300)
+                                                 timeout=90)
                 out += [f"--- {nhan} ---"] + lines
                 buoc.append({"lenh": nhan, "ok": True, "chi_tiet": "da chay"})
+                log.info("rollback #%s: %s xong", rid, nhan)
             except Exception as e:                              # noqa: BLE001
                 buoc.append({"lenh": nhan, "ok": False,
                              "chi_tiet": str(e).splitlines()[0][:160]})
+                # GHI LOG NGAY, khong doi den cuoi: tac vu nay co the bi
+                # giet giua duong (app khoi dong lai), va luc do `output`
+                # cua ham chua kip vao DB - con dong log thi van con.
+                log.warning("rollback #%s: %s THAT BAI - %s", rid, nhan,
+                            str(e).splitlines()[0][:200])
                 if bat_buoc:
                     that_bai.append(nhan)
 
-        # Xoa param + trail do phien nay tao
-        for t in (et, rep):
-            p = self.cfg.param_file(t)
-            if p.exists():
-                p.unlink()
-                out.append(f"da xoa {p}")
-        for f in sorted((self.cfg.gg_home / "dirdat").glob(f"{pre}*")):
-            f.unlink()
-            out.append(f"da xoa {f}")
+        # KIEM KET QUA THAT, khong tin vao viec lenh "khong nem loi".
+        #
+        # `gg.run()` KHONG nem loi khi GGSCI in ra ERROR - no tra ve cac
+        # dong output. Nghia la mot `unregister` that bai van bi tinh la
+        # "da chay", va day la lenh duy nhat ma that bai la de lai capture
+        # MO COI o DB nguon. Nguoc lai, chay lai don tren mot phien da don
+        # tay (su co #6) thi moi lenh deu in "does not exist" - cung khong
+        # phai loi. Ca hai chieu chi phan xu duoc bang cach NHIN VAO HE
+        # THONG: tien trinh con trong `info all` khong, capture con trong
+        # `dba_capture@DBL_PMNV` khong.
+        try:
+            con_ps = {x.name for x in await gg.info_all(self.cfg)} & {et, rep}
+        except Exception as e:                                  # noqa: BLE001
+            con_ps = set()
+            that_bai.append(f"không đọc được info all để kiểm ({str(e)[:80]})")
+        if con_ps:
+            that_bai.append("tiến trình vẫn còn trong info all: "
+                            + ", ".join(sorted(con_ps)))
+        out.append("--- kiem ket qua that ---")
+        out.append("info all: " + (", ".join(sorted(con_ps)) + " VẪN CÒN"
+                                   if con_ps else f"không còn {et} / {rep}"))
+        cap = f"OGG$CAP_{et}"
+        try:
+            n_cap = await self.ora.scalar(
+                "SELECT COUNT(*) FROM dba_capture@DBL_PMNV WHERE capture_name=:c",
+                c=cap)
+        except Exception as e:                                  # noqa: BLE001
+            n_cap = None
+            that_bai.append(f"không đọc được dba_capture để kiểm ({str(e)[:80]})")
+        if n_cap:
+            that_bai.append(f"capture {cap} VẪN CÒN ở DB nguồn")
+        out.append(f"dba_capture@DBL_PMNV: {cap} "
+                   + ("VẪN CÒN - MỒ CÔI" if n_cap else
+                      "không còn" if n_cap == 0 else "không kiểm được"))
+        for x in that_bai:
+            log.warning("rollback #%s: %s", rid, x)
 
-        # Tien trinh da bi xoa -> app khong con duoc dieu khien chung nua.
-        gg.PROCESSES.difference_update({et, rep})
-        if run["kind"] == "LUONG_MOI":
-            # Bang tro lai "chua thuoc luong nao" de con mo lai duoc phien
-            # khac. KHONG dung toi du lieu da nap va KHONG tat TRANDATA -
-            # hai viec do xoa tu dong la doan mo, de nguoi quyet.
-            self.con.execute(
-                "UPDATE managed_table SET stream=NULL, in_extract=0, has_map=0,"
-                " handlecollisions=0, updated_at=? WHERE src_table=?",
-                (int(time.time()), run["src_table"]))
-            out.append(f"danh sach quan ly: {run['src_table']} tro lai chua thuoc luong nao")
-
-        self._ghi_run(rid, state="ABORTED", finished_at=int(time.time()),
-                      note=f"rollback boi {who}: {reason}")
+        # Xoa param + trail do phien nay tao - CHI KHI cac lenh BAT BUOC
+        # da xong.
+        #
+        # Su co 2026-10-20: lenh don treo, Extract VAN CON trong `info all`,
+        # nhung neu buoc nay cu chay thi no xoa mat file tham so cua mot
+        # tien trinh dang ton tai -> process khong con gi de chan doan, va
+        # lan sau khoi dong lai no abend voi mot loi khong lien quan
+        # (OGG-01044 trail khong con gan voi extract). Con file thi con
+        # hien truong, va buoc KIEM_TEN cua luot sau se tu chan vi
+        # "<ten>.prm DA ton tai - phien truoc co the chua don sach".
+        if that_bai:
+            out.append("")
+            out.append("GIU LAI file tham so va trail: lenh don bat buoc chua xong "
+                       "(%s) nen tien trinh co the van con - xoa file luc nay la "
+                       "xoa mat hien truong." % ", ".join(that_bai))
+        else:
+            for t in (et, rep):
+                p = self.cfg.param_file(t)
+                if p.exists():
+                    p.unlink()
+                    out.append(f"da xoa {p}")
+            for f in sorted((self.cfg.gg_home / "dirdat").glob(f"{pre}*")):
+                f.unlink()
+                out.append(f"da xoa {f}")
 
         if that_bai:
+            # CHUA SACH -> GIU phien OPEN. Truoc day nhanh nay van dat
+            # ABORTED, va vi khoi "Don sach" chi hien cho phien dang mo, nut
+            # don BIEN MAT dung luc con mot capture mo coi o DB nguon.
+            self._ghi_run(rid, note=(
+                f"[dọn CHƯA xong - bấm Dọn sạch lại sau khi xử lý] {who}: "
+                + "; ".join(that_bai))[:480])
             out.append("")
             out.append("!!! CHƯA DỌN SẠCH. Kiểm TAY ngay:")
             out.append("  SELECT capture_name, status FROM dba_capture@DBL_PMNV;")
@@ -2571,9 +3850,26 @@ MAP {run["src_owner"]}.{run["src_table"]}, TARGET {run["tgt_owner"]}.{run["tgt_t
             out.append("  SELECT server_name FROM dba_apply;")
             out.append("     -> không được còn OGG$" + rep)
             out.append("Tiến trình đọc redo mồ côi sẽ giữ archive log và đọc redo VĨNH VIỄN.")
+            out.append("Phiên GIỮ trạng thái mở để bấm Dọn sạch lại được - chạy lại an toàn: "
+                       "lệnh nào đã xong thì lần sau chỉ báo 'does not exist'.")
             raise WizardError(
-                "Rollback chay nhung " + ", ".join(that_bai) + " THẤT BẠI. Đọc kết quả chi tiết - có thể còn tiến trình đọc redo mồ côi "
-                                                               "ở DB nguồn.")
+                "Dọn CHƯA sạch: " + "; ".join(that_bai) + ". Phiên vẫn mở - xử lý rồi bấm "
+                "Dọn sạch lại.")
+
+        # Tien trinh da bi xoa -> app khong con duoc dieu khien chung nua.
+        gg.PROCESSES.difference_update({et, rep})
+        if run["kind"] in ("LUONG_MOI", "LUONG_LOG"):
+            # Bang tro lai "chua thuoc luong nao" de con mo lai duoc phien
+            # khac. KHONG dung toi du lieu da nap va KHONG tat TRANDATA -
+            # hai viec do xoa tu dong la doan mo, de nguoi quyet.
+            self.con.execute(
+                f"UPDATE {self._bang_qly(run)} SET stream=NULL, in_extract=0, has_map=0,"
+                " handlecollisions=0, updated_at=? WHERE src_table=?",
+                (int(time.time()), run["src_table"]))
+            out.append(f"danh sach quan ly: {run['src_table']} tro lai chua thuoc luong nao")
+
+        self._ghi_run(rid, state="ABORTED", finished_at=int(time.time()),
+                      note=f"rollback boi {who}: {reason}")
 
         out += ["",
                 "KHÔNG đụng tới (cố ý, để người quyết): bảng đích đã tạo và dữ liệu đã "

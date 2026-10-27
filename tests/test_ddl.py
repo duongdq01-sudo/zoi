@@ -72,12 +72,55 @@ def number_co_precision_va_scale():
 # ------------------------------------------------------- nhanh TU CHOI
 @test
 def kieu_can_phan_xet_thi_TU_CHOI_chu_khong_doan():
-    for t in ("CLOB", "BLOB", "XMLTYPE", "LONG"):
+    for t in ("XMLTYPE", "LONG", "LONG RAW", "BFILE"):
         try:
             kieu_cot(_c(1, "X", data_type=t))
         except DdlError:
             continue
         raise AssertionError(f"{t}: đáng lẽ phải từ chối")
+
+
+@test
+def lob_thuong_thi_mang_kieu_nguyen_ven():
+    """Lo 6 PMNV3 (2026-10-23) dung o BH_KENH_CALLBACK_NK.DU_LIEU_THO CLOB."""
+    for t in ("CLOB", "NCLOB", "BLOB"):
+        assert kieu_cot(_c(1, "X", data_type=t, data_length=4000)) == t
+
+
+@test
+def script_bang_co_CLOB_tao_duoc():
+    sql = sinh_ddl(
+        tgt_owner="ODS", tgt_table="BH_KENH_CALLBACK_NK",
+        cols=[_c(1, "ID", data_type="NUMBER", nullable="N"),
+              _c(2, "DU_LIEU_THO", data_type="CLOB", data_length=4000)],
+        pk=[{"column_name": "ID", "position": 1}], idx=[],
+        src="KT_BSH.BH_KENH_CALLBACK_NK")
+    assert '"DU_LIEU_THO" CLOB' in sql, sql
+
+
+@test
+def index_DOMAIN_Oracle_Text_bi_bo_va_khong_trung_cot():
+    """Lo 19 PMNV3 (2026-10-23): BH_XE_GCN_TV co index CTXSYS.CONTEXT
+    *_TXT_* - truoc day bi doi thanh B-tree, TXT_BXT trung cot voi BKS ->
+    ORA-01408 giua chung script, bang dich tao do dang."""
+    def ix(ten, cols, typ="NORMAL", uq="NONUNIQUE"):
+        return {"index_name": ten, "cols": cols, "index_type": typ, "uniqueness": uq}
+    sql = sinh_ddl(
+        tgt_owner="ODS", tgt_table="BH_XE_GCN_TV",
+        cols=[_c(1, "MA_CHI_NHANH", nullable="N"), _c(2, "BIEN_XE_TV"),
+              _c(3, "SO_GCN")],
+        pk=[{"column_name": "MA_CHI_NHANH", "position": 1}],
+        idx=[ix("BH_XE_GCN_TV_P", "MA_CHI_NHANH", uq="UNIQUE"),
+             ix("BH_XE_GCN_TV_BKS", "BIEN_XE_TV"),
+             ix("BH_XE_GCN_TV_TXT_BXT", "BIEN_XE_TV", typ="DOMAIN"),
+             ix("BH_XE_GCN_TV_TXT_SGCN", "SO_GCN", typ="DOMAIN"),
+             ix("BH_XE_GCN_TV_GCN2", "SO_GCN"),
+             ix("BH_XE_GCN_TV_GCN3", "SO_GCN")],
+        src="KT_BSH.BH_XE_GCN_TV")
+    tao = [d for d in sql.splitlines() if d.startswith("CREATE")]
+    assert not any("TXT_" in d for d in tao), tao
+    assert sum("GCN3" in d for d in tao) == 0, tao      # trung cot GCN2
+    assert "PROMPT SO_INDEX=2" in sql, sql
 
 
 # --------------------------------------------------- toan bo script DDL

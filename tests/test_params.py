@@ -132,7 +132,7 @@ def chan_giam_so_dong_TABLE_cua_Extract():
                     if "TBH_PBO" not in l) + "\n"
     loi = _guard(ETHT, xau, process="ETHT")
     assert any("TABLE giảm" in l for l in loi), loi
-    assert any("DELETE TRANDATA" in l for l in loi), loi
+    assert any("Gỡ bảng khỏi luồng" in l for l in loi), loi
 
 
 @test

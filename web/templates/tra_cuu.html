@@ -1,0 +1,70 @@
+{% extends "base.html" %}{% block title %}Tra cứu bảng &mdash; ggadmin{% endblock %}
+{% block body %}
+<h4>Tra cứu bảng trong luồng đồng bộ</h4>
+<p><small class="muted">
+Nhập một hoặc nhiều tên bảng (cách nhau bằng dấu phẩy, khoảng trắng hoặc xuống
+dòng, tối đa 300). Công cụ đọc <strong>thẳng file tham số</strong> của mọi luồng
+&mdash; kể cả luồng log &mdash; để biết bảng nằm ở Extract / Replicat nào, rồi
+đối chiếu với danh sách quản lý và DB. Chỉ đọc, không thay đổi gì.
+</small></p>
+
+<form method="get" action="/tra-cuu">
+  <textarea name="q" rows="4" required style="text-transform:uppercase"
+            placeholder="VÍ DỤ: BH_XE_GCN_TV, KT_BCHQ">{{ q }}</textarea>
+  <button type="submit">Tra cứu</button>
+</form>
+
+{% if sai %}
+<p class="bad"><small>Tên không hợp lệ, bỏ qua: {{ sai | join(', ') }}</small></p>
+{% endif %}
+{% if qua_tran %}
+<p class="warn"><small>Danh sách dài hơn 300 bảng - chỉ tra 300 bảng đầu.</small></p>
+{% endif %}
+{% if loi_ora %}
+<p class="warn"><small>Không đọc được phần Oracle (bảng ở nguồn / ODS, TRANDATA):
+  {{ loi_ora }}. Phần file tham số bên dưới vẫn đúng.</small></p>
+{% endif %}
+
+{% if kq %}
+{% set dem_ok = kq | selectattr('muc', 'equalto', 'ok') | list | length %}
+<p><small><strong>{{ kq | length }}</strong> bảng &middot;
+  <span class="ok">{{ dem_ok }} đang đồng bộ</span> &middot;
+  {{ kq | length - dem_ok }} chưa / lỗi</small></p>
+<div style="overflow-x:auto">
+<table role="grid">
+<thead><tr>
+  <th>Bảng</th><th>Kết luận</th><th>Extract (TABLE)</th>
+  <th>Replicat (MAP &rarr; đích)</th><th>KEYCOLS</th>
+  <th>Nguồn / TRANDATA / ODS</th><th>Danh sách quản lý</th>
+</tr></thead>
+<tbody>
+{% for x in kq %}
+<tr>
+  <td><code>{{ x.bang }}</code></td>
+  <td><span class="{{ x.muc }}">{{ x.ket_luan }}</span>
+    {% for id in x.phien_mo %}<br><small><a href="/wizard/{{ id }}">phiên #{{ id }} đang mở</a></small>{% endfor %}</td>
+  <td>{% for e in x.extract %}<code>{{ e.extract }}</code> <small class="muted">({{ e.stream }}{{ ', log' if e.loai == 'log' }})</small><br>{% else %}<small class="muted">&mdash;</small>{% endfor %}</td>
+  <td>{% for r in x.replicat %}<code>{{ r.replicat }}</code> &rarr; <code>{{ r.tgt_owner }}.{{ r.tgt_table }}</code>
+      {% if r.hc %}<span class="warn">HANDLECOLLISIONS</span>{% endif %}<br>{% else %}<small class="muted">&mdash;</small>{% endfor %}</td>
+  <td>{% for r in x.replicat %}<small>{{ r.keycols or 'khoá chính' }}</small><br>{% else %}<small class="muted">&mdash;</small>{% endfor %}</td>
+  <td><small>
+    {% if x.co_nguon is defined %}
+      {% if x.co_nguon %}có{% else %}<span class="bad">KHÔNG có</span>{% endif %}
+      / {{ 'bật' if x.trandata else 'tắt' }}
+      / {{ 'có' if x.co_dich else 'chưa có' }}{% if x.co_dich and x.bang_dich != x.bang %} ({{ x.bang_dich }}){% endif %}
+    {% else %}<span class="muted">?</span>{% endif %}
+  </small></td>
+  <td><small>
+    {% if x.managed %}luồng {{ x.managed.stream or 'rỗng' }}
+      {% if x.managed.src_rows is not none %}<br>{{ '{:,}'.format(x.managed.src_rows) }} / {{ '{:,}'.format(x.managed.tgt_rows or 0) }} dòng{% endif %}
+      {% if x.managed.note %}<br><span class="muted">{{ x.managed.note }}</span>{% endif %}
+    {% endif %}
+    {% if x.managed_log %}{% if x.managed %}<br>{% endif %}log: luồng {{ x.managed_log.stream or 'rỗng' }}{% endif %}
+    {% if not x.managed and not x.managed_log %}<span class="muted">chưa đăng ký</span>{% endif %}
+  </small></td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% endif %}
+{% endblock %}

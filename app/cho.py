@@ -4,7 +4,7 @@ Vi sao can mot cho rieng thay vi `for i in range(60): sleep(10)`:
 
 1. NHIP CO DINH lam mat thoi gian vo ich. Buoc truoc xong o giay thu 2 thi
    voi nhip 10 giay, buoc sau van phai doi den giay thu 10. Tren mot quy
-   trinh 23 buoc co 3-4 cho nhu the, cong lai thanh vai phut CUA SO BAO TRI
+   trinh 24 buoc co 3-4 cho nhu the, cong lai thanh vai phut CUA SO BAO TRI
    bi tieu khong vi ly do gi. Ma cua so bao tri la luc Replicat dang DUNG -
    do la thoi gian dat nhat trong ca quy trinh.
 

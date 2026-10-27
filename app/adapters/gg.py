@@ -27,8 +27,11 @@ Cam bay da code hoa o day:
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 
@@ -126,17 +129,103 @@ async def run(cfg, script: str, *, timeout: int = 60, allow_blocked: bool = Fals
 
     async with _LOCK:
         t0 = time.monotonic()
-        p = await asyncio.to_thread(
-            subprocess.run,
-            [str(cfg.gg_home / "ggsci")],
-            input=body, capture_output=True, text=True,
-            cwd=str(cfg.gg_home), env=cfg.subprocess_env(),
-            timeout=timeout, shell=False,          # shell=False tuyet doi
-        )
+        rc, out = await asyncio.to_thread(
+            chay_co_rao, [str(cfg.gg_home / "ggsci")], body,
+            cwd=str(cfg.gg_home), env=cfg.subprocess_env(), timeout=timeout)
         dt = int((time.monotonic() - t0) * 1000)
-    lines = _clean(p.stdout + "\n" + p.stderr)
+    lines = _clean(out)
     lines.append(f"__duration_ms={dt}")
-    return p.returncode, lines
+    return rc, lines
+
+
+class GgsciTreo(RuntimeError):
+    """ggsci bi giet vi treo / hoi Y-N / in qua nhieu. Xem `chay_co_rao`."""
+
+
+# Tran output cua MOT lan goi ggsci. `info all` ~1 KB, `view report` lon nhat
+# vai tram KB; 8 MB la rat rong ma van nho hon RAM may chu hang tram lan.
+TRAN_OUTPUT = 8 * 1024 * 1024
+# GGSCI hoi xac nhan theo mau nay (vd `delete checkpointtable` thieu `!`).
+RE_HOI_YN = re.compile(rb"\[Y\]es or \[N\]o|\(y/n\)", re.I)
+
+
+def chay_co_rao(cmd: list[str], body: str, *, cwd: str, env: dict | None,
+                timeout: int) -> tuple[int, str]:
+    """Chay ggsci voi BA RAO, thay cho `subprocess.run(capture_output=True)`.
+
+    SU CO #6 (2026-10-20), HAI LAN, TREN MAY CHU DB: lenh `delete
+    checkpointtable` thieu `!` lam GGSCI hoi "[Y]es or [N]o". Khong co ban
+    phim, cau hoi nhan EOF va ggsci LAP HOI VO TAN, in ra lien tuc o 100% CPU.
+    `capture_output=True` gom TOAN BO output do vao RAM cua app: 4,8 GB va
+    4,9 GB trong khoang 90 giay -> OOM killer giet app (15:44:54, 16:07:54),
+    giet luon tac vu don sach giua duong, va de lai `ggsci` mo coi. Do la mot
+    `global_oom` tren may co SGA 19 GB - lan sau no co the chon mot tien trinh
+    Oracle thay vi python.
+
+    Ba rao:
+      1. Output ghi ra FILE TAM, khong vao RAM.
+      2. Kich thuoc file vuot TRAN_OUTPUT -> giet ngay.
+      3. Thay mau cau hoi Y/N trong output -> giet ngay: cong cu KHONG BAO
+         GIO tra loi duoc cau hoi do, cho them chi la dot CPU.
+    Cong voi `timeout` (vuot thi giet). Moi lan giet deu `kill()` + `wait()`
+    de KHONG de lai tien trinh mo coi.
+    """
+    # HANDLE DOC RIENG (2026-10-20, bat duoc khi test chap chon 1/8 lan).
+    # Tien trinh con thua ke fd cua file output, va hai ben dung CHUNG mot
+    # vi tri ghi (open file description). Ban dau ham nay `seek` lui 4 KB
+    # tren chinh handle do de tim cau hoi Y/N -> neu con ghi dung luc do, no
+    # ghi DE len output cu. App khong bao gio dong vao handle ghi; moi lan
+    # nhin duoi file deu mo mot handle DOC moi, co vi tri rieng.
+    thu_muc = tempfile.mkdtemp(prefix="ggsci_")
+    duong = os.path.join(thu_muc, "out")
+    ly_do = None
+    try:
+        with open(duong, "wb") as ghi:
+            p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=ghi,
+                                 stderr=subprocess.STDOUT, cwd=cwd, env=env,
+                                 shell=False)           # shell=False tuyet doi
+            try:
+                p.stdin.write(body.encode("utf-8"))
+                p.stdin.close()
+            except OSError:
+                pass                   # ggsci thoat som - doc output ben duoi
+            t0 = time.monotonic()
+            while True:
+                try:
+                    p.wait(timeout=0.3)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                except BaseException:
+                    # Bat ky ngoai le nao giua chung (ke ca huy tac vu): giet
+                    # con TRUOC khi bo di, khong de lai ggsci mo coi.
+                    p.kill()
+                    p.wait()
+                    raise
+                co = os.path.getsize(duong)
+                # Cau hoi Y/N kiem TRUOC: no la nguyen nhan cu the nhat, va
+                # nguoi doc can biet "ggsci hoi lai" chu khong phai "in nhieu".
+                with open(duong, "rb") as doc:
+                    doc.seek(max(0, co - 4096))
+                    duoi = doc.read(4096)
+                if RE_HOI_YN.search(duoi):
+                    ly_do = "GGSCI hỏi xác nhận [Y]es/[N]o - công cụ không trả lời được"
+                elif co > TRAN_OUTPUT:
+                    ly_do = f"in ra hơn {TRAN_OUTPUT // 1048576} MB"
+                elif time.monotonic() - t0 > timeout:
+                    ly_do = f"quá {timeout}s"
+                if ly_do:
+                    p.kill()
+                    p.wait()
+                    break
+        with open(duong, "rb") as doc:
+            text = doc.read(TRAN_OUTPUT).decode("utf-8", "replace")
+    finally:
+        shutil.rmtree(thu_muc, ignore_errors=True)
+    if ly_do:
+        raise GgsciTreo(f"đã giết ggsci: {ly_do}. Đuôi output: "
+                        + " | ".join(text.strip().splitlines()[-3:])[:300])
+    return p.returncode, text
 
 
 def parse_info_all(lines: list[str]) -> list[ProcState]:
@@ -234,13 +323,14 @@ async def checkprm(cfg, param_file: str, kind: str) -> tuple[bool, list[str]]:
     if kind not in ("EXTRACT", "REPLICAT", "MANAGER"):
         raise Blocked(f"loại quy trình không hợp lệ: {kind!r}")
     async with _LOCK:
-        p = await asyncio.to_thread(
-            subprocess.run,
+        # Cung hang rao voi ggsci (xem `chay_co_rao`): output ra file tam,
+        # co tran, va bi giet khi qua gio - khong bao gio gom vo han vao RAM.
+        _, out = await asyncio.to_thread(
+            chay_co_rao,
             [str(cfg.gg_home / "checkprm"),
              f"dirprm/{check_arg(param_file)}", "-c", kind],
-            capture_output=True, text=True, cwd=str(cfg.gg_home),
-            env=cfg.subprocess_env(), timeout=60, shell=False)
-    lines = _clean(p.stdout + "\n" + p.stderr)
+            "", cwd=str(cfg.gg_home), env=cfg.subprocess_env(), timeout=60)
+    lines = _clean(out)
     bad = any(re.search(r"\b(error|invalid|unrecognized)\b", l, re.I) for l in lines)
     return (not bad), lines
 
@@ -513,7 +603,7 @@ async def info_trandata(cfg, owner: str, table: str) -> tuple[bool | None, list[
 
 
 async def add_trandata(cfg, owner: str, table: str,
-                       cols: list[str] | None = None
+                       cols: list[str] | None = None, *, allcols: bool = False
                        ) -> tuple[bool, list[str]]:
     """ADD TRANDATA cho MOT bang, tai @PMNV.
 
@@ -529,10 +619,39 @@ async def add_trandata(cfg, owner: str, table: str,
             if not re.fullmatch(r"[A-Z][A-Z0-9_$#]{0,29}", c):
                 raise Blocked(f"Tên cột không hợp lệ: {c!r}")
         cmd += ", COLS (" + ", ".join(cols) + ")"
+    if allcols:
+        # Luong LOG: DELETE/UPDATE phai mang DU moi cot vao redo.
+        cmd += " ALLCOLS"
     _, lines = await run(
         cfg, f"dblogin useridalias {ALIAS_SOURCE}\n{cmd}", timeout=120)
     ok = any(TRANDATA_OK.search(l) for l in lines)
     return ok, lines
+
+
+# Hinh dang DUY NHAT ma delete_trandata duoc phep gui: mot bang, schema hang so.
+RE_DELETE_TRANDATA = re.compile(
+    r"\Adblogin useridalias pmnv_ogg\ndelete trandata KT_BSH\.[A-Z][A-Z0-9_$#]{0,127}\Z")
+
+
+async def delete_trandata(cfg, owner: str, table: str) -> tuple[bool | None, list[str]]:
+    """DELETE TRANDATA cho MOT bang, tai @PMNV. Tra (da tat?, cac dong raw).
+
+    `DELETE TRANDATA` nam trong BLOCKED - chi mo o day, va chi cho DUNG hinh
+    dang RE_DELETE_TRANDATA (khong wildcard, khong nhieu lenh). Ben goi PHAI
+    da kiem bang khong con nam trong file tham so cua Extract nao: tat
+    TRANDATA cua bang dang duoc capture lam UPDATE/DELETE thieu cot khoa
+    trong redo, va Replicat ap sai dong ma khong bao loi.
+    Ket qua doc lai bang `info trandata`, khong tin output cua lenh xoa.
+    """
+    if owner != "KT_BSH":
+        raise Blocked(f"Schema nguồn là hằng số KT_BSH, không nhận {owner!r}")
+    script = (f"dblogin useridalias {ALIAS_SOURCE}\n"
+              f"delete trandata {owner}.{check_arg(table)}")
+    if not RE_DELETE_TRANDATA.match(script):
+        raise Blocked(f"delete trandata chỉ nhận đúng một bảng KT_BSH: {table!r}")
+    _, lines = await run(cfg, script, timeout=120, allow_blocked=True)
+    da_bat, lines2 = await info_trandata(cfg, owner, table)
+    return (None if da_bat is None else not da_bat), lines + ["--- kiem chung ---"] + lines2
 
 
 # =====================================================================

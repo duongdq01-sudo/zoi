@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Luồng log &mdash; ggadmin{% endblock %}
+{% block body %}
+
+<article>
+<p><small class="muted">
+<strong>Luồng log</strong> đồng bộ theo kiểu <strong>lưu lịch sử</strong>: mỗi
+INSERT, UPDATE hay DELETE ở bảng nguồn <code>A</code> đều trở thành
+<strong>một dòng INSERT</strong> vào bảng đích <code>ODS.A_LOG</code>. Không dòng
+nào ở bảng log bị sửa hay xoá.
+</small></p>
+<table role="grid">
+<thead><tr><th>Cột thêm ở bảng _LOG</th><th>Ý nghĩa</th></tr></thead>
+<tbody>
+<tr><td><code>LOG_TYPE</code></td><td><code>I</code> = INSERT, <code>U</code> = UPDATE
+  (ghi <strong>giá trị sau khi sửa</strong>), <code>D</code> = DELETE (ghi giá trị của
+  dòng bị xoá)</td></tr>
+<tr><td><code>COMMIT_TS</code></td><td>lúc giao dịch commit ở nguồn</td></tr>
+<tr><td><code>LOG_TIME</code></td><td>lúc dòng được ghi vào đích (<code>SYSDATE</code>);
+  lệch với <code>COMMIT_TS</code> đúng bằng độ trễ của luồng</td></tr>
+</tbody></table>
+<p><small class="muted">
+<strong>Khác luồng thường, có chủ ý:</strong> chạy trên <strong>luồng log riêng</strong>
+(Extract + Replicat riêng &mdash; tham số của nó áp cho cả Extract nên không trộn
+với luồng thường). <strong>Không nạp dữ liệu ban đầu</strong>: lịch sử bắt đầu từ lúc
+bảng vào luồng log. Bảng _LOG <strong>không có khoá chính</strong>, mọi cột cho
+phép NULL. <strong>Không lan DDL</strong>: <code>TRUNCATE</code>/<code>DROP</code> ở nguồn
+không xoá lịch sử ở đích &mdash; nhưng nguồn <strong>thêm cột</strong> thì phải thêm
+tay vào bảng _LOG, nếu không Replicat sẽ dừng lỗi.
+<br>Một bảng được <strong>vừa</strong> đồng bộ thường (<code>ODS.A</code>) <strong>vừa</strong>
+ghi log (<code>ODS.A_LOG</code>) &mdash; hai việc độc lập.
+<br><span class="warn">Ở nguồn, bảng được bật <code>TRANDATA ALLCOLS</code>: redo của bảng
+đó to hơn vì mọi cột đều được ghi. Mỗi luồng log thêm một tiến trình đọc redo ở DB
+nguồn.</span>
+</small></p>
+</article>
+
+{# Khung theo doi song dung chung voi Thao tac nhanh. #}
+<div hx-get="/nhanh/song" hx-trigger="load" hx-swap="outerHTML">
+  <article><p><small class="muted">đang đọc trạng thái...</small></p></article>
+</div>
+
+<article style="border:2px solid var(--danger)">
+  <header><strong class="bad">Tạo luồng LOG mới và đưa bảng đầu tiên vào</strong></header>
+  <p><small class="bad">{{ tl.tong }} bước. Bước {{ tl.register }} <strong>đăng ký một tiến
+  trình đọc redo vào DB NGUỒN production</strong>; bước {{ tl.trandata }} bật
+  <code>TRANDATA ALLCOLS</code> cho bảng ở nguồn.</small></p>
+  <p><small class="warn">Bước {{ tl.cauhinh }} ghi khối <code>[streams.&lt;mã&gt;]</code> có
+  <code>loai = "log"</code> vào <code>conf/app.toml</code> (lưu bản cũ, đọc lại đối chiếu).
+  Hỏng ở bất kỳ bước nào sau khi chốt tên thì công cụ <strong>tự dọn sạch</strong> như
+  luồng mới thường &mdash; không xoá bảng _LOG, không tắt TRANDATA.</small></p>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
+    <input type="hidden" name="op" value="AUTO_LUONG_LOG">
+    <div class="grid">
+      <label>Tên bảng nguồn
+        <input type="text" name="target" id="tl_bang" required list="ds_chua_log"
+               placeholder="VÍ DỤ: BH_BT_NTBA_TT_PT" style="text-transform:uppercase">
+      </label>
+      <label>Mã luồng log trong <code>conf/app.toml</code>
+        <input type="text" name="ns_sid" id="tl_sid" placeholder="VÍ DỤ: LOG1"
+               style="text-transform:uppercase"
+               hx-get="/nhanh/goi-y" hx-target="#tl-ten" hx-swap="innerHTML"
+               hx-trigger="keyup changed delay:400ms, change"
+               hx-vals='js:{ma: document.querySelector("#tl_sid").value,
+                            bang: document.querySelector("#tl_bang").value}'>
+      </label>
+    </div>
+    <datalist id="ds_chua_log">
+      {% for t in chua_log %}<option value="{{ t.src_table }}">{% endfor %}
+    </datalist>
+    <small class="muted">Đích sẽ là <code>ODS.&lt;tên bảng&gt;_LOG</code> (tên bảng tối đa 26
+      ký tự). Bảng chưa đăng ký ở đâu cũng gõ được &mdash; bước 2 tự đưa vào danh sách
+      log (vẫn kiểm bảng có thật ở nguồn).</small>
+    <div id="tl-ten" hx-get="/nhanh/goi-y" hx-trigger="load" hx-swap="innerHTML">
+      <p><small class="muted">đang lấy gợi ý tên...</small></p>
+    </div>
+    <label>Mô tả luồng &mdash; hiện trên bảng điều khiển
+      <input type="text" name="ns_ten" placeholder="VÍ DỤ: Lịch sử bồi thường">
+    </label>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="contrast">Chạy tự động &mdash; tạo luồng log</button>
+  </form>
+  <p><small class="muted">Xác nhận mức L2: nhập lại <strong>tên Extract</strong> &mdash; đó là
+  thứ sắp được đăng ký vào DB nguồn.</small></p>
+</article>
+
+{# MOT khoi, HAI chieu: o tich lat sang go bang (giong khoi Them bang o Thao tac nhanh). #}
+<article x-data="{ go: false }" :style="go ? 'border:2px solid var(--danger)' : ''">
+  <header>
+    <strong x-show="!go">Thêm bảng vào luồng log</strong>
+    <strong x-show="go" class="bad" x-cloak>GỠ bảng khỏi luồng log</strong>
+  </header>
+  {% if not luong_log %}
+  <p><small class="warn">Chưa có luồng log nào &mdash; tạo ở khối bên trên trước.</small></p>
+  {% else %}
+  <label style="margin-bottom:.6rem">
+    <input type="checkbox" role="switch" x-model="go">
+    <strong>Gỡ bảng khỏi luồng log</strong> &mdash; chạy ngược lại
+  </label>
+  <div x-show="!go">
+    <p><small class="muted">{{ th.tong }} bước: tạo bảng _LOG, bật TRANDATA ALLCOLS, thêm
+    dòng MAP (<code>INSERTALLRECORDS</code>) <strong>trước</strong> dòng TABLE. Replicat của
+    luồng log dừng từ bước {{ th.dung_rep }} đến bước {{ th.chay_rep }} &mdash; chỉ vài
+    giây vì không có đợt nạp.</small></p>
+  </div>
+  <div x-show="go" x-cloak>
+    <p><small class="muted">{{ gl.tong }} bước, thứ tự như gỡ bảng ở Thao tác nhanh: bỏ
+    TABLE trước, chờ Replicat <strong>áp hết</strong> phần đã ghi của bảng, rồi mới bỏ
+    MAP. Không gỡ được bảng cuối cùng của luồng. <strong>Bảng _LOG và lịch sử trong đó
+    giữ nguyên.</strong></small></p>
+  </div>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
+    <input type="hidden" name="op" value="AUTO_THEM_LOG"
+           :value="go ? 'AUTO_GO_LOG' : 'AUTO_THEM_LOG'">
+    <label>Tên bảng nguồn
+      <input type="text" name="target" required list="ds_chua_log"
+             :list="go ? 'ds_dang_log' : 'ds_chua_log'"
+             placeholder="VÍ DỤ: HT_MA_KVUC" style="text-transform:uppercase">
+    </label>
+    <datalist id="ds_dang_log">
+      {% for t in dang_log %}<option value="{{ t.src_table }}">{{ t.stream }}</option>{% endfor %}
+    </datalist>
+    <label x-show="!go">Luồng log &mdash; chọn khi bảng chưa thuộc luồng log nào
+      <select name="stream_sel" :disabled="go">
+        <option value="">(lấy theo danh sách log)</option>
+        {% for sid, st in luong_log.items() %}
+        <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="contrast"
+            x-text="go ? 'Chạy tự động — GỠ bảng khỏi luồng log' : 'Chạy tự động — thêm bảng vào luồng log'">Chạy
+      tự động &mdash; thêm bảng vào luồng log</button>
+  </form>
+  {% endif %}
+</article>
+
+<div id="khung"></div>
+
+<article>
+  <header><strong>Bảng đang ghi log</strong></header>
+  {% if dang_log %}
+  <table role="grid">
+  <thead><tr><th>Bảng nguồn</th><th>Bảng log ở đích</th><th>Luồng</th></tr></thead>
+  <tbody>
+  {% for t in dang_log %}
+  <tr><td><code>{{ t.src_table }}</code></td><td><code>ODS.{{ t.tgt_table }}</code></td>
+      <td>{{ t.stream }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}
+  <p><small class="muted">Chưa có bảng nào ghi log.</small></p>
+  {% endif %}
+</article>
+
+{% endblock %}

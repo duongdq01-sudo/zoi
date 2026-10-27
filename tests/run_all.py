@@ -34,7 +34,11 @@ for _luong in (sys.stdout, sys.stderr):
 
 MODULES = ["test_gg_parse", "test_safety", "test_params", "test_jobs",
            "test_lo_nhieu_bang", "test_auto", "test_cho_khoiphuc",
-           "test_notify", "test_ddl", "test_toml_ghi", "test_luong_moi"]
+           "test_notify", "test_ddl", "test_toml_ghi", "test_luong_moi",
+           "test_go_bang", "test_luong_log", "test_ap_rong",
+           "test_goi_y_commit", "test_scn_floor", "test_checksum_lob",
+           "test_verify_lai", "test_dang_ky_nhieu", "test_tra_cuu",
+           "test_logsize"]
 
 
 def main() -> int:

@@ -32,46 +32,84 @@ hình.
 </div>
 
 <div class="grid">
-<article>
-  <header><strong>Thêm bảng vào luồng đang chạy</strong></header>
-  <p><small class="muted">23 bước. Dùng cho bảng <strong>chưa có dòng
-  MAP</strong>. Bảng phải đã được đăng ký ở
-  <a href="/wizard">trang Quy trình</a> &mdash; công cụ không được chạm vào
-  bảng ngoài danh sách quản lý.</small></p>
-  <p><small class="warn">Từ bước 6 là <strong>cửa sổ bảo trì</strong>: Replicat
-  của luồng đó dừng cho đến bước 18.</small></p>
+{# MOT khoi, HAI chieu (yeu cau 2026-10-20): o tich "Go bang" lat khoi nay
+   sang quy trinh nguoc lai. Cac o chi dung cho them bang (luong, KEYCOLS) bi
+   `disabled` khi tich - de chung KHONG bi gui di, khong chi bi an. #}
+<article x-data="{ go: false }" :style="go ? 'border:2px solid var(--danger)' : ''">
+  <header>
+    <strong x-show="!go">Thêm bảng vào luồng đang chạy</strong>
+    <strong x-show="go" class="bad" x-cloak>GỠ bảng khỏi luồng đang chạy</strong>
+  </header>
 
-  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
-    <input type="hidden" name="op" value="AUTO_ADD_TABLE">
+  <label style="margin-bottom:.6rem">
+    <input type="checkbox" role="switch" x-model="go">
+    <strong>Gỡ bảng khỏi luồng</strong> &mdash; chạy ngược lại
+  </label>
+
+  <div x-show="!go">
+    <p><small class="muted">{{ bt.tong }} bước. Dùng cho bảng <strong>chưa có dòng
+    MAP</strong>. <strong>Bảng chưa đăng ký cũng chạy được</strong> &mdash; bước
+    {{ bt.dang_ky }} tự đưa bảng vào danh sách quản lý, đúng luồng chọn ở dưới (vẫn
+    kiểm bảng có THẬT ở nguồn).</small></p>
+    <p><small class="warn">Từ bước {{ bt.dung_rep }} là <strong>cửa sổ bảo trì</strong>:
+    Replicat của luồng đó dừng cho đến bước {{ bt.chay_rep }}.</small></p>
+  </div>
+  <div x-show="go" x-cloak>
+    <p><small class="muted">{{ gb.tong }} bước. Dùng cho bảng <strong>đang có</strong>
+    dòng TABLE/MAP trong một luồng. Thứ tự là hằng số và là ngược của thêm bảng:
+    <strong>bỏ dòng TABLE trước</strong> (bước {{ gb.bo_table }}), chạy lại Extract,
+    chờ Replicat <strong>áp hết</strong> phần đã ghi của bảng, rồi mới bỏ dòng MAP
+    (bước {{ gb.bo_map }}). Đảo lại là mất dữ liệu im lặng.</small></p>
+    <p><small class="warn">Extract và Replicat mỗi cái dừng vài giây để nạp lại tham
+    số. <strong>Không gỡ được bảng cuối cùng</strong> của một Extract &mdash; đó là gỡ
+    cả luồng.</small></p>
+    <p><small class="muted"><strong>Cố ý KHÔNG làm</strong>: tắt TRANDATA ở nguồn
+    (chạm DB nguồn production, để người quyết) và xoá bảng/dữ liệu ở đích (dữ liệu
+    dừng ở thời điểm gỡ). Bảng trở lại «chưa thuộc luồng nào» trong danh sách quản
+    lý.</small></p>
+  </div>
+
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
+    <input type="hidden" name="op" value="AUTO_ADD_TABLE"
+           :value="go ? 'AUTO_GO_BANG' : 'AUTO_ADD_TABLE'">
     <label>Tên bảng
       <input type="text" name="target" required list="ds_them"
+             :list="go ? 'ds_go' : 'ds_them'"
              placeholder="VÍ DỤ: HT_MA_KVUC" style="text-transform:uppercase">
     </label>
     <datalist id="ds_them">
       {% for t in them %}<option value="{{ t.src_table }}">{% endfor %}
     </datalist>
-    <label>Luồng &mdash; chỉ cần chọn nếu bảng chưa gắn luồng
-      <select name="stream_sel">
+    <datalist id="ds_go">
+      {% for t in go or [] %}<option value="{{ t.src_table }}">{{ t.stream }}</option>{% endfor %}
+    </datalist>
+    <label x-show="!go">Luồng &mdash; chỉ cần chọn nếu bảng chưa gắn luồng (kể cả bảng
+      chưa đăng ký)
+      <select name="stream_sel" :disabled="go">
         <option value="">(lấy theo danh sách quản lý)</option>
         {% for sid, st in cfg.streams.items() %}
         <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
         {% endfor %}
       </select>
     </label>
-    <label>KEYCOLS &mdash; chỉ cần nhập nếu bảng KHÔNG có khoá chính thật
+    <label x-show="!go">KEYCOLS &mdash; chỉ cần nhập nếu bảng KHÔNG có khoá chính thật
       <input type="text" name="keycols" placeholder="VÍ DỤ: MA_DVI, MA_KENH"
-             style="text-transform:uppercase">
+             style="text-transform:uppercase" :disabled="go">
     </label>
-    <small class="muted">Để trống nếu bảng có khoá chính thật &mdash; công cụ
-      lấy đúng các cột của khoá chính đó. Bảng chỉ có <strong>index duy
-      nhất</strong> thì công cụ CỐ Ý không tự lấy (chọn bộ khoá nào là phán
-      đoán nghiệp vụ), và không nhập ở đây thì lượt chạy sẽ dừng lại ở bước 2
-      để hỏi. Nhập ở đây <strong>không</strong> bỏ qua kiểm chứng: bước 2 vẫn
-      kiểm tính duy nhất <strong>trên dữ liệu thật</strong> và đếm số dòng
-      NULL của từng cột khoá.</small>
+    <small class="muted" x-show="!go">Để trống nếu bảng có khoá chính thật &mdash; công
+      cụ lấy đúng các cột của khoá chính đó. Bảng chỉ có <strong>index duy
+      nhất</strong> thì công cụ CỐ Ý không tự lấy (chọn bộ khoá nào là phán đoán
+      nghiệp vụ), và không nhập ở đây thì lượt chạy sẽ dừng lại ở bước
+      {{ bt.keycols }} để hỏi. Nhập ở đây <strong>không</strong> bỏ qua kiểm chứng:
+      bước {{ bt.keycols }} vẫn kiểm tính duy nhất <strong>trên dữ liệu thật</strong>
+      và đếm số dòng NULL của từng cột khoá.</small>
+    <small class="muted" x-show="go" x-cloak>Luồng lấy theo danh sách quản lý &mdash;
+      không cần chọn. Gợi ý khi gõ chỉ gồm các bảng đang thuộc một luồng.</small>
     <input type="text" name="reason" required minlength="10"
            placeholder="lý do (từ 10 ký tự)">
-    <button type="submit" class="contrast">Chạy tự động &mdash; thêm bảng</button>
+    <button type="submit" class="contrast"
+            x-text="go ? 'Chạy tự động — GỠ bảng khỏi luồng' : 'Chạy tự động — thêm bảng'">Chạy
+      tự động &mdash; thêm bảng</button>
   </form>
 </article>
 
@@ -84,7 +122,7 @@ hình.
   khi bảng <strong>thực sự lệch</strong> &mdash; nên một cú bấm không thể xoá
   một bảng đang đúng.</small></p>
 
-  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
     <input type="hidden" name="op" value="AUTO_RESYNC">
     <label>Tên bảng
       <input type="text" name="target" required list="ds_resync"
@@ -104,11 +142,19 @@ hình.
   <header><strong class="bad">Tạo luồng MỚI và đưa bảng đầu tiên vào</strong></header>
 
   <p><small class="bad"><strong>Đây là thao tác nguy hiểm nhất của cả công cụ.</strong>
-  29 bước. Bước 10 <strong>đăng ký một tiến trình đọc redo vào DB NGUỒN
+  30 bước. Bước 11 <strong>đăng ký một tiến trình đọc redo vào DB NGUỒN
   production</strong>. Dùng khi bảng chưa thuộc luồng nào và muốn nó có
   Extract/Replicat riêng.</small></p>
 
-  <p><small class="warn"><strong>Bước 14 ghi thẳng vào <code>conf/app.toml</code></strong>
+  <p><small class="muted"><strong>Bảng chưa đăng ký cũng chạy được &mdash; bước 2 tự
+  đăng ký</strong>. Ô đăng ký ở <a href="/wizard">trang Quy trình</a> bắt chọn một luồng
+  ĐÃ CÓ trong <code>conf/app.toml</code>, mà luồng của lượt này chỉ tồn tại từ bước 15:
+  bắt đăng ký trước là một vòng không thể đi. Chốt không mất: bước 2 vẫn kiểm bảng có
+  <strong>THẬT</strong> ở nguồn <code>KT_BSH</code> trước khi ghi dòng nào, và dòng đó ghi
+  với <strong>luồng để rỗng, cả ba cờ = 0</strong> &mdash; bước 15 mới gắn luồng. Mọi
+  bước chạm vào GoldenGate đều ở SAU bước 2.</small></p>
+
+  <p><small class="warn"><strong>Bước 15 ghi thẳng vào <code>conf/app.toml</code></strong>
   trên server: lưu một bản cũ có đóng dấu thời gian, chỉ <strong>THÊM</strong> khối
   <code>[streams.&lt;mã&gt;]</code> vào cuối file (không viết lại dòng nào đang có), rồi
   đọc lại file để đối chiếu &mdash; ba luồng đang chạy phải y nguyên từng giá trị,
@@ -127,12 +173,12 @@ hình.
   tham số và trail. Nó <strong>không</strong> xoá bảng đích đã tạo, <strong>không</strong>
   xoá dữ liệu đã nạp và <strong>không</strong> tắt TRANDATA.</small></p>
 
-  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+  <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML show:#khung:top">
     <input type="hidden" name="op" value="AUTO_NEW_STREAM">
     <div class="grid">
       <label>Tên bảng đầu tiên
         <input type="text" name="target" required list="ds_moi"
-               placeholder="bảng chưa thuộc luồng nào"
+               placeholder="bảng chưa thuộc luồng nào - gõ được cả tên chưa đăng ký"
                style="text-transform:uppercase">
       </label>
       <label>Mã luồng trong <code>conf/app.toml</code>
@@ -148,6 +194,9 @@ hình.
     <datalist id="ds_moi">
       {% for t in moi or [] %}<option value="{{ t.src_table }}">{% endfor %}
     </datalist>
+    <small class="muted">Danh sách gợi ý chỉ gồm các bảng ĐÃ đăng ký mà chưa thuộc luồng
+      nào. Bảng chưa đăng ký thì <strong>gõ thẳng tên vào</strong> &mdash; bước 2 sẽ đưa
+      nó vào danh sách quản lý.</small>
 
     {# Bon o ten: dien san bang goi y, nap ngay khi mo trang. #}
     <div id="ns-ten" hx-get="/nhanh/goi-y" hx-trigger="load" hx-swap="innerHTML">
@@ -162,10 +211,10 @@ hình.
              style="text-transform:uppercase">
     </label>
     <small class="muted">Khác với ô &laquo;thêm bảng&raquo; bên trên: ở luồng mới, cột
-      khoá được <strong>nhúng thẳng vào file tham số</strong> sinh ra ở bước 8 và
+      khoá được <strong>nhúng thẳng vào file tham số</strong> sinh ra ở bước 9 và
       <strong>không bước nào sửa lại dòng MAP</strong> về sau. Bảng không có khoá chính
-      mà để trống thì lượt chạy dừng ở <strong>bước 3</strong> &mdash; trước khi chạm
-      vào bất cứ thứ gì. Nhập ở đây không bỏ qua kiểm chứng: bước 3 vẫn kiểm tính duy
+      mà để trống thì lượt chạy dừng ở <strong>bước 4</strong> &mdash; trước khi chạm
+      vào bất cứ thứ gì. Nhập ở đây không bỏ qua kiểm chứng: bước 4 vẫn kiểm tính duy
       nhất trên dữ liệu thật và đếm NULL từng cột khoá.</small>
     <input type="text" name="reason" required minlength="10"
            placeholder="lý do (từ 10 ký tự)">
@@ -183,12 +232,21 @@ hình.
   <table role="grid">
   <thead><tr><th>Trường hợp</th><th>Vì sao</th></tr></thead>
   <tbody>
-  <tr><td>Bảng không trong danh sách quản lý</td>
-      <td>Công cụ không được chạm vào bảng ngoài phạm vi. Đăng ký trước.</td></tr>
+  <tr><td>Bảng không trong danh sách quản lý
+      <br><small class="muted">(trừ «thêm bảng» và «tạo luồng mới» &mdash; hai thao
+      tác này tự đăng ký)</small></td>
+      <td>Công cụ không được chạm vào bảng ngoài phạm vi. Đăng ký trước.
+      <br><small class="muted">«Tạo luồng mới» tự đăng ký ở bước 2 &mdash; bảng đầu tiên
+      của một luồng chưa tồn tại thì không gắn được vào luồng nào để đăng ký trước. Bảng
+      vẫn phải có thật ở nguồn.</small></td></tr>
   <tr><td>Nguồn và đích <strong>khác tên</strong></td>
       <td>Ánh xạ cột có thể lệch theo kiểu khó thấy &mdash; phải đi từng bước.</td></tr>
   <tr><td>Thêm bảng mà bảng <strong>đã có đủ TABLE và MAP</strong></td>
       <td>Đó là trường hợp đồng bộ lại, không phải thêm mới.</td></tr>
+  <tr><td>Gỡ bảng mà bảng là <strong>bảng cuối cùng</strong> của Extract</td>
+      <td>Extract không còn bảng nào là gỡ cả luồng, một việc khác hẳn.</td></tr>
+  <tr><td>Gỡ bảng mà bảng <strong>không có TABLE/MAP</strong> trong luồng nào</td>
+      <td>Không có gì để gỡ.</td></tr>
   <tr><td>Đồng bộ lại mà bảng <strong>chưa có MAP</strong></td>
       <td>Chưa từng được đồng bộ &mdash; phải thêm vào luồng trước.</td></tr>
   <tr><td>Luồng đang có một quy trình khác mở</td>

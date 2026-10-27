@@ -9,6 +9,7 @@ vendor-runtime/*.tar.gz
 # Bi mat - khong bao gio commit
 conf/secrets.ini
 conf/app.toml
+conf/*.bak*
 *.pem
 *.key
 

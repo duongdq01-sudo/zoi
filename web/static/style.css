@@ -381,6 +381,7 @@ table thead th:first-child, table tbody td:first-child { padding-left:.8rem; }
   border-radius:var(--radius-full);
   border:1px solid currentColor;
 }
+.pill.ok   { background:var(--success-bg); }
 .pill.bad  { background:var(--danger-bg); }
 .pill.warn { background:var(--warning-bg); }
 
@@ -491,3 +492,12 @@ details > summary { font-size:.82rem; color:var(--slate-600); }
   pre.log, pre.diff { background:var(--white); color:var(--slate-800); }
   @page { size:A4 landscape; margin:12mm; }
 }
+
+/* Dau hieu "dang chay" cua khung xac nhan: an, chi hien khi htmx dang gui
+   (htmx gan class htmx-request len form trong luc cho tra loi). */
+.dang-chay { display: none; margin-top: .5rem; }
+form.htmx-request .dang-chay { display: block; }
+
+/* Alpine: an phan tu cho toi khi Alpine khoi dong xong - tranh khoi "go bang"
+   loe len mot khoanh khac luc tai trang. */
+[x-cloak] { display: none !important; }

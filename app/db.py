@@ -227,9 +227,30 @@ CREATE INDEX IF NOT EXISTS ix_pv ON param_version(process, id DESC);
 -- Nhung con so quyet dinh tinh dung dan cua ca runbook duoc luu thanh COT
 -- RIENG, khong nhet vao ctx_json: chung can query duoc, index duoc, hien
 -- duoc tren bao cao.
+-- Danh sach quan ly cua LUONG LOG (2026-10-20). TACH khoi managed_table vi
+-- mot bang nguon duoc phep VUA dong bo thuong (ODS.A) VUA ghi log (ODS.A_LOG),
+-- ma managed_table co khoa duy nhat (src_owner, src_table). Cung bo cot voi
+-- managed_table o nhung cot quy trinh dung, de cac buoc dung chung chi doi
+-- TEN BANG. `prepared` o day nghia la DA BAT TRANDATA ALLCOLS.
+CREATE TABLE IF NOT EXISTS managed_log (
+  src_owner        TEXT NOT NULL DEFAULT 'KT_BSH',
+  src_table        TEXT NOT NULL,
+  tgt_owner        TEXT NOT NULL DEFAULT 'ODS',
+  tgt_table        TEXT NOT NULL,
+  stream           TEXT,
+  keycols          TEXT,
+  in_extract       INTEGER NOT NULL DEFAULT 0,
+  has_map          INTEGER NOT NULL DEFAULT 0,
+  prepared         INTEGER NOT NULL DEFAULT 0,
+  handlecollisions INTEGER NOT NULL DEFAULT 0,
+  note             TEXT,
+  updated_at       INTEGER,
+  PRIMARY KEY (src_owner, src_table)
+);
+
 CREATE TABLE IF NOT EXISTS wizard_run (
   id         INTEGER PRIMARY KEY,
-  kind       TEXT NOT NULL CHECK (kind IN ('ADD_TABLE','RESYNC_TABLE','NEW_STREAM','LUONG_MOI')),
+  kind       TEXT NOT NULL CHECK (kind IN ('ADD_TABLE','RESYNC_TABLE','NEW_STREAM','LUONG_MOI','GO_BANG','LUONG_LOG','THEM_LOG','GO_LOG')),
   state      TEXT NOT NULL CHECK (state IN ('OPEN','DONE','ABORTED')),
   stream     TEXT,
   src_owner  TEXT NOT NULL DEFAULT 'KT_BSH',
@@ -351,8 +372,18 @@ def connect(path: Path) -> sqlite3.Connection:
     return con
 
 
+# Moi loai quy trinh hop le. Them loai moi = them vao day VA vao SCHEMA ben
+# tren; `_nang_cap_kind` tu dung lai CHECK cho DB cu.
+KIND_HOP_LE = ("ADD_TABLE", "RESYNC_TABLE", "NEW_STREAM", "LUONG_MOI", "GO_BANG",
+               "LUONG_LOG", "THEM_LOG", "GO_LOG")
+
+
 def _nang_cap_kind(con: sqlite3.Connection, path: Path) -> None:
-    """Them 'LUONG_MOI' vao CHECK cua wizard_run.kind (2026-10-15).
+    """Dua CHECK cua wizard_run.kind ve DUNG `KIND_HOP_LE`.
+
+    Lan 1 (2026-10-15) them LUONG_MOI, lan 2 (2026-10-20) them GO_BANG. Viet
+    lai CA DANH SACH bang regex thay vi chen sau mot ten cu the - de lan sau
+    them loai moi khong phai sua ham nay.
 
     SQLite khong ALTER duoc rang buoc CHECK -> phai dung bang moi roi chep
     sang. Ba chot:
@@ -365,21 +396,27 @@ def _nang_cap_kind(con: sqlite3.Connection, path: Path) -> None:
     r = con.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='wizard_run'"
     ).fetchone()
-    if not r or "LUONG_MOI" in (r[0] or ""):
+    if not r or all(f"'{k}'" in (r[0] or "") for k in KIND_HOP_LE):
         return
+    import re
     cot = [x[1] for x in con.execute("PRAGMA table_info(wizard_run)")]
     ds = ", ".join(cot)
-    moi = (r[0] or "").replace("CREATE TABLE IF NOT EXISTS wizard_run",
-                               "CREATE TABLE wizard_run_moi", 1)                       .replace("CREATE TABLE wizard_run",
-                               "CREATE TABLE wizard_run_moi", 1)                       .replace("'NEW_STREAM'", "'NEW_STREAM','LUONG_MOI'", 1)
-    if "wizard_run_moi" not in moi or "LUONG_MOI" not in moi:
+    ds_kind = ",".join(f"'{k}'" for k in KIND_HOP_LE)
+    moi = re.sub(r"CHECK\s*\(\s*kind\s+IN\s*\([^)]*\)\s*\)",
+                 f"CHECK (kind IN ({ds_kind}))", r[0] or "", count=1)
+    # Ten bang trong DDL co the CO ngoac kep: sau lan doi ten 2026-10-15
+    # (`ALTER TABLE wizard_run_moi RENAME TO wizard_run`) SQLite luu lai la
+    # `CREATE TABLE "wizard_run" (` - dung dang dang co tren server.
+    moi = re.sub(r'CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?"?wizard_run"?\s*\(',
+                 "CREATE TABLE wizard_run_moi (", moi, count=1)
+    if "wizard_run_moi" not in moi or not all(f"'{k}'" in moi for k in KIND_HOP_LE):
         raise RuntimeError("khong dung lai duoc DDL cua wizard_run de nang cap")
     try:
         shutil.copy2(path, path.with_name(
             f"{path.name}.{time.strftime('%Y%m%d-%H%M%S')}.premigrate"))
     except OSError as e:
         log.warning("khong luu duoc ban DB truoc nang cap: %s", e)
-    log.info("nang cap wizard_run: them LUONG_MOI vao CHECK(kind)")
+    log.info("nang cap wizard_run: CHECK(kind) -> %s", ds_kind)
     con.execute("PRAGMA foreign_keys=OFF")
     try:
         con.execute("BEGIN IMMEDIATE")

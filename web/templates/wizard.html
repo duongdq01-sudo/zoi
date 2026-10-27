@@ -57,16 +57,26 @@ vết</strong>, không phải tác dụng phụ của việc mở quy trình. C�
 có THẬT ở nguồn <code>KT_BSH</code> trước khi nhận.
 <br><br>
 Bảng chưa có ở <code>ODS</code> cũng đăng ký được &mdash; quy trình
-<code>ADD_TABLE</code> sẽ <strong>tạo bảng đích ở bước 3</strong> từ cấu trúc
+<code>ADD_TABLE</code> sẽ <strong>tạo bảng đích ở bước 4</strong> từ cấu trúc
 bảng nguồn.
+<br><br>
+<strong>Luồng để rỗng được</strong>, dùng khi bảng này sẽ là <strong>bảng đầu tiên
+của một luồng MỚI</strong>: luồng đó chưa có trong <code>conf/app.toml</code> nên
+không có gì để chọn, và quy trình tạo luồng mới sẽ gắn luồng ở bước
+<strong>đăng ký cấu hình</strong>. Riêng <a href="/nhanh">thao tác nhanh «tạo luồng
+mới»</a> thì <strong>không cần bước này</strong> &mdash; nó tự đăng ký bảng ở bước 2.
 </small></p>
 <form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
   <input type="hidden" name="op" value="REGISTRY_ADD">
+  <textarea name="target" required rows="4"
+            placeholder="TÊN BẢNG - một hoặc nhiều bảng, cách nhau bằng dấu phẩy, khoảng trắng hoặc xuống dòng (ví dụ: HT_MA_KVUC, HT_MA_KENH)"
+            style="text-transform:uppercase"></textarea>
+  <small class="muted">Dán cả danh sách được (tối đa 300 bảng). <strong>Tất cả
+    hoặc không</strong>: chỉ một tên không có ở nguồn là không đăng ký bảng nào.
+    Bảng đã đăng ký từ trước thì bỏ qua và báo lại.</small>
   <div class="grid">
-    <input type="text" name="target" required
-           placeholder="TÊN BẢNG (ví dụ: HT_MA_KVUC)"
-           style="text-transform:uppercase">
-    <select name="stream_sel" required onchange="this.form.payload.value=this.value">
+    <select name="stream_sel">
+      <option value="">(chưa có luồng &mdash; bảng đầu tiên của một luồng MỚI)</option>
       {% for sid, st in cfg.streams.items() %}
       <option value="{{ sid }}">{{ sid }} &mdash; {{ st.extract }}/{{ st.replicat }}</option>
       {% endfor %}
@@ -76,13 +86,49 @@ bảng nguồn.
     <button type="submit">Đăng ký</button>
   </div>
 </form>
+
+<details style="margin-top:1rem">
+<summary><strong>Bỏ đăng ký</strong> bảng chưa thuộc luồng nào
+  <small class="muted">({{ bo_duoc|length }} bảng bỏ được)</small></summary>
+<p><small class="muted">
+Chỉ <strong>xoá dòng trong danh sách quản lý</strong> của công cụ. Không đụng file
+tham số Extract/Replicat, bảng đích ở <code>ODS</code> hay TRANDATA ở nguồn.
+Chỉ nhận bảng <strong>không có TABLE, không có MAP</strong> và không nằm trong
+phiên quy trình đang mở. Một tên không đủ điều kiện là <strong>không bỏ bảng
+nào</strong>.
+<br><br>
+Bảng <strong>còn bật TRANDATA</strong> thì phải tích ô <em>tắt TRANDATA ở
+nguồn</em> - nếu không, lần đồng bộ danh sách kế tiếp sẽ tự thêm lại bảng. Tích
+ô này là thao tác <strong>mức L2</strong> (chạm DB nguồn production): gõ tay xác
+nhận, và công cụ từ chối nếu bảng còn nằm trong file tham số của <strong>bất kỳ
+Extract nào</strong>, kể cả luồng log.
+</small></p>
+{% if bo_duoc %}
+<p><small>Bỏ được: {% for t in bo_duoc %}<code>{{ t.src_table }}</code>{% if t.prepared %} <span class="warn">(còn TRANDATA)</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}</small></p>
+{% endif %}
+<form hx-post="/action/arm" hx-target="#khung" hx-swap="innerHTML">
+  <input type="hidden" name="op" value="REGISTRY_DEL">
+  <textarea name="target" required rows="3"
+            placeholder="TÊN BẢNG cần bỏ đăng ký - một hoặc nhiều, cách nhau bằng dấu phẩy, khoảng trắng hoặc xuống dòng"
+            style="text-transform:uppercase"></textarea>
+  <label>
+    <input type="checkbox" name="tat_trandata" value="1">
+    Tắt luôn TRANDATA ở nguồn (<code>delete trandata</code> tại @PMNV - mức L2)
+  </label>
+  <div class="grid">
+    <input type="text" name="reason" required minlength="10"
+           placeholder="lý do (từ 10 ký tự)">
+    <button type="submit" class="secondary">Bỏ đăng ký</button>
+  </div>
+</form>
+</details>
 </article>
 
 <div class="grid">
 <article>
   <header><strong>Thêm bảng vào luồng đang chạy</strong>
     <small class="muted">(ADD_TABLE)</small></header>
-  <p><small class="muted">23 bước. Dùng cho bảng <strong>chưa có dòng
+  <p><small class="muted">24 bước. Dùng cho bảng <strong>chưa có dòng
   MAP</strong>. Thứ tự <code>dừng Replicat</code> &rarr;
   <code>chạy lại Extract</code> &rarr; <code>chạy Replicat</code> là
   <strong>hằng số trong code</strong>, giao diện không có chỗ đảo.</small></p>
@@ -182,7 +228,11 @@ công cụ kiểm trùng với 6 tiến trình + 3 trail + 3 bảng checkpoint �
     </select>
   </label>
   <small class="muted">Tên Extract / Replicat / tiền tố trail sẽ gõ ở
-    <strong>bước 2</strong>, sau khi các điều kiện tiên quyết đã đạt.</small>
+    <strong>bước 2</strong>, sau khi các điều kiện tiên quyết đã đạt.
+    <br>Đường bấm tay này <strong>bắt đăng ký bảng trước</strong> (ô trên, để trống
+    luồng). Muốn gộp cả phần đăng ký vào một lượt thì dùng
+    <a href="/nhanh">thao tác nhanh «tạo luồng mới»</a> &mdash; 30 bước, có sẵn bước
+    đăng ký bảng.</small>
   <button type="submit" class="contrast" {{ '' if moi else 'disabled' }}>
     Mở quy trình tạo luồng mới</button>
   {% if not moi %}

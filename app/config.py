@@ -54,6 +54,9 @@ class Config:
     # LUONG_MOI ghi THEM khoi [streams.<ma>] vao dung file nay (co luu ban
     # cu, ghi nguyen tu, doc lai doi chieu) - xem app/toml_ghi.py.
     app_toml: Path
+    # khoi [log_tran]: han muc (GB) tung nhom log + nguong_pct cho trang
+    # Bieu do log. Trong = dung mac dinh trong app/logsize.py.
+    log_tran: dict = field(default_factory=dict)
 
     @property
     def db_path(self) -> Path:
@@ -140,4 +143,5 @@ def load(app_toml: Path | None = None, secrets_ini: Path | None = None) -> Confi
         creds=_read_secrets(secrets_ini),
         retain_raw_days=int(raw.get("retention", {}).get("raw_days", 90)),
         notify=raw.get("notify", {}),
+        log_tran=raw.get("log_tran", {}),
     )

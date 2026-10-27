@@ -59,7 +59,7 @@ def _doc(p: Path) -> dict[str, Any]:
 
 
 def khoi_streams(sid: str, extract: str, replicat: str, trail: str,
-                 ten: str = "", *, ghi_chu: str = "") -> str:
+                 ten: str = "", *, ghi_chu: str = "", loai: str = "") -> str:
     """Dung khoi [streams.<SID>] dang van ban.
 
     Thuan, test duoc, va CHINH NO la ban xem truoc hien tren khung xac nhan
@@ -74,6 +74,12 @@ def khoi_streams(sid: str, extract: str, replicat: str, trail: str,
              f'replicat = "{replicat.strip().upper()}"',
              f'trail    = "{trail.strip().lower()}"',
              f'ten      = "{ten}"']
+    if loai:
+        # Luong LOG (dich _LOG, INSERTALLRECORDS). Luong thuong KHONG ghi dong
+        # nay - giu y nguyen khoi cua 4 luong dang chay.
+        if loai != "log":
+            raise TomlGhiError(f"loai luong khong hop le: {loai!r}")
+        dong.append('loai     = "log"')
     return "\n".join(dong) + "\n"
 
 
@@ -130,7 +136,7 @@ def _doi_chieu(cu: dict, moi: dict, *, sid: str | None = None,
 
 
 def them_khoi_streams(path: Path, sid: str, extract: str, replicat: str,
-                      trail: str, ten: str = "") -> dict:
+                      trail: str, ten: str = "", *, loai: str = "") -> dict:
     """Them khoi [streams.<SID>] vao CUOI file.
 
     Tra {"da_co", "backup", "khoi", "sha_truoc", "sha_sau"}. `da_co=True`
@@ -155,7 +161,7 @@ def them_khoi_streams(path: Path, sid: str, extract: str, replicat: str,
     sha_truoc = _sha(path)
     goc = path.read_text(encoding="utf-8")
     bak = luu_ban_cu(path)
-    khoi = khoi_streams(sid, et, rep, tr, ten)
+    khoi = khoi_streams(sid, et, rep, tr, ten, loai=loai)
     # Dong cuoi khong co ky tu xuong dong (ai do sua tay) thi khoi moi se bi
     # noi vao dong do. Chuan hoa truoc khi noi.
     than = goc if goc.endswith("\n") else goc + "\n"
@@ -240,7 +246,7 @@ def bo_khoi_streams(path: Path, sid: str) -> dict:
 
 
 def dang_ky_luong(cfg, sid: str, extract: str, replicat: str, trail: str,
-                  ten: str = "") -> dict:
+                  ten: str = "", *, loai: str = "") -> dict:
     """Ghi luong moi vao app.toml ROI nap nong vao cau hinh dang chay.
 
     Thu tu KHONG duoc dao: ghi dia truoc, doc lai doi chieu, CHI KHI DAT moi
@@ -264,11 +270,13 @@ def dang_ky_luong(cfg, sid: str, extract: str, replicat: str, trail: str,
         if str(st.get("trail", "")).lower() == tr:
             raise TomlGhiError(f"tiền tố trail {tr!r} đã thuộc luồng {ten_cu}")
 
-    r = them_khoi_streams(path, sid, et, rep, tr, ten)
+    r = them_khoi_streams(path, sid, et, rep, tr, ten, loai=loai)
 
     # Chi dung vao bo nho SAU khi dia da dat.
     cfg.streams[sid] = {"extract": et, "replicat": rep, "trail": tr,
                         "ten": ten or f"Luồng {sid}"}
+    if loai:
+        cfg.streams[sid]["loai"] = loai
     gg.dang_ky_process(et, rep)
     log.info("đã đăng ký luồng %s (%s/%s, trail %s) vào %s", sid, et, rep, tr, path)
     r["sid"] = sid

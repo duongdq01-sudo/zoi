@@ -581,8 +581,9 @@ class IndexMixin:
         script. Bang da ton tai thi bo qua - va o lo CN_* thi CA 8 BANG da
         ton tai san tu truoc, nen buoc nay chi bao cao va di tiep.
         """
-        from .ddl import sinh_ddl
+        from .ddl import sinh_ddl, sinh_ddl_log
         ds = self._cac_bang(run)
+        la_log = run["kind"] in ("LUONG_LOG", "THEM_LOG")
         nhieu = len(ds) > 1
         out: list[str] = []
         phai_tao: list[str] = []
@@ -613,9 +614,15 @@ class IndexMixin:
                 continue
             cols, pk, idx = await self._meta_nguon(rb)
             phai_tao.append(b)
-            sql_phan.append(sinh_ddl(
-                tgt_owner=o, tgt_table=t, cols=cols, pk=pk, idx=idx,
-                src='%s.%s' % (rb["src_owner"], rb["src_table"])))
+            if la_log:
+                # Bang LOG: khong khoa, cot deu NULL, them 3 cot log.
+                sql_phan.append(sinh_ddl_log(
+                    tgt_owner=o, tgt_table=t, cols=cols,
+                    src='%s.%s' % (rb["src_owner"], rb["src_table"])))
+            else:
+                sql_phan.append(sinh_ddl(
+                    tgt_owner=o, tgt_table=t, cols=cols, pk=pk, idx=idx,
+                    src='%s.%s' % (rb["src_owner"], rb["src_table"])))
             out.append("%-14s sẽ TẠO: %d cột, %s khoá chính, %d index ở nguồn"
                        % (b, len(cols), "co" if pk else "KHONG co", len(idx)))
 

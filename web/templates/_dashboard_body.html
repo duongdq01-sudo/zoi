@@ -104,7 +104,7 @@
 </article>
 {% endif %}
 
-<h4>Ba luồng replication</h4>
+<h4>{{ cfg.streams|length }} luồng replication</h4>
 <div class="grid-3">
 {% for sid, st in cfg.streams.items() %}
   {% set ext = s.procs | selectattr('name','equalto', st.extract) | first %}
@@ -122,6 +122,18 @@
         {{ 'BÌNH THƯỜNG' if khoe else 'CẦN XEM' }}</span>
     </header>
     <div class="kv">
+      {% set nb = ((s.recon or {}).get('theo_luong') or {}).get(sid) %}
+      <b>Số bảng</b>
+      <span>
+        {% if nb %}
+          <a href="/tables?stream={{ sid }}"><strong>{{ nb.tong }} bảng</strong></a>
+          {% if nb.n_extract == nb.n_map %}
+            <small class="muted">Extract {{ nb.n_extract }} &middot; MAP {{ nb.n_map }}</small>
+          {% else %}
+            <span class="bad">Extract {{ nb.n_extract }} &middot; MAP {{ nb.n_map }} (lệch)</span>
+          {% endif %}
+        {% else %}<span class="muted">-</span>{% endif %}
+      </span>
       <b>Extract</b>
       <span>
         <code>{{ st.extract }}</code>
@@ -135,9 +147,9 @@
           &middot; chậm {{ rep.lag_s|hms }}{% else %}<span class="bad">không thấy</span>{% endif %}
       </span>
       <b>Trail <code>{{ st.trail }}</code></b>
-      <span>{{ tr.get('files', 0) }} file, {{ tr.get('total_bytes')|bytes }}
-        <small class="muted">mới nhất {{ tr.get('newest','-') }}
-        {{ tr.get('newest_bytes')|bytes }}</small></span>
+      <span>{{ tr.get('files', 0) }} file, tổng {{ tr.get('total_bytes')|bytes }}
+        <small class="muted">&middot; file đang ghi: {{ tr.get('newest','-') }}
+        ({{ tr.get('newest_bytes')|bytes }})</small></span>
       <b>Dòng bị bỏ</b>
       <span>
         {% if dsc.get('so_dong_la', 0) > 0 %}
