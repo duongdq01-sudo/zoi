@@ -150,9 +150,14 @@ def replicat_log_INSERTALLRECORDS_khong_chong_trung_khong_bo_loi():
     assert "HANDLECOLLISIONS" not in u
     assert "REPERROR" not in u, "bo im lang mot dong lich su te hon ABEND"
     assert "TARGET ODS.BH_BT_NTBA_TT_PT_LOG" in u
-    assert 'LOG_TYPE = @CASE (@GETENV ("GGHEADER", "OPTYPE"), "INSERT", "I", "DELETE", "D", "U")' in prm
-    assert 'COMMIT_TS = @GETENV ("GGHEADER", "COMMITTIMESTAMP")' in prm
-    assert "LOG_TIME" not in prm, "LOG_TIME la DEFAULT SYSDATE o dich, khong map"
+    assert "LOG_TYPE = @CASE (@GETENV ('GGHEADER', 'OPTYPE'), 'INSERT', 'I', 'DELETE', 'D', 'U')" in prm
+    assert "COMMIT_TS = @GETENV ('GGHEADER', 'COMMITTIMESTAMP')" in prm
+    # GG 21.3 doc param theo ANSI SQL: nhay kep la TEN COT -> RLOG abend
+    # OGG-00919 'could not find column "GGHEADER"' (2026-10-27)
+    assert '"' not in prm[prm.upper().index("COLMAP"):], "chuoi hang trong COLMAP phai nhay don"
+    # bang _LOG khong khoa -> GG lay moi cot lam khoa; thieu LOG_TIME trong
+    # COLMAP la abend OGG-00918 (2026-10-27)
+    assert "LOG_TIME = @DATENOW ()" in prm
 
 
 @test
@@ -414,3 +419,21 @@ def toml_khoi_luong_log_co_loai_va_dang_ky_giu_loai():
     assert Cfg.streams["LOG1"]["loai"] == "log"
     import tomllib
     assert tomllib.loads(tmp.read_text(encoding="utf-8"))["streams"]["LOG1"]["loai"] == "log"
+
+
+@test
+def trang_bang_hien_ca_bang_cua_luong_log():
+    """Nut loc LOG o trang Bang tung luon rong vi listing() chi doc
+    managed_table (2026-10-27)."""
+    _, con = _wizard()
+    _them(con, "managed_table", "BH_HD_GOC_TTPT", stream="PMNV3")
+    _them(con, "managed_log", "BH_HD_GOC_TTPT", stream="LOG")
+    log = registry.listing(con, "LOG")
+    assert [(r["src_table"], r["tgt_table"]) for r in log] == \
+        [("BH_HD_GOC_TTPT", "BH_HD_GOC_TTPT_LOG")], log
+    assert log[0]["la_log"] is True
+    # tables.html chay StrictUndefined: thieu khoa la trang 500
+    for k in ("src_rows", "tgt_rows", "v_ts", "v_matched", "v_mode"):
+        assert k in log[0], k
+    assert [r["stream"] for r in registry.listing(con, "PMNV3")] == ["PMNV3"]
+    assert sorted(r["stream"] for r in registry.listing(con)) == ["LOG", "PMNV3"]

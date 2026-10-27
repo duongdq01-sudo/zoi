@@ -304,6 +304,8 @@ def banner_cua_ca_ba_replicat_deu_duoc_nhan_ra():
             l = (f"Oracle GoldenGate Delivery for Oracle process {kind}, "
                  f"group {rep} : 2026-10-14 10:17:01")
             assert RE_BANNER.search(l), l
+    # Dong GG ghi khi abend (RLOG.dsc that 2026-10-27)
+    assert RE_BANNER.search("Process Abending : 2026-10-27 08:48:42.908670")
     # Dong ban ghi bi bo KHONG duoc coi la banner
     for l in ("Discarded record from action ABEND on error 1403",
               "ORA-01403: no data found",

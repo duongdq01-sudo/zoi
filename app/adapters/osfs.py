@@ -21,8 +21,13 @@ QU_ERROR = re.compile(r"QU_ERROR", re.I)
 REDACT = re.compile(r"(PASSWORD|IDENTIFIED\s+BY)(\s+)(\S+)", re.I)
 # Dong "banner" cua chinh GoldenGate trong discard file - KHONG phai ban ghi
 # bi bo. GG ghi mot dong khi Replicat START va mot dong nua khi no STOP.
+# Khi ABEND, GG ghi them `Process Abending : <thoi diem>` - cung khong phai
+# ban ghi bi bo (abend da co luat process_khong_running bao rieng). Khong
+# nhan dong nay thi canh bao discard mo oan va KHONG BAO GIO dong: RLOG
+# 2026-10-27 abend 24 lan vi loi COLMAP, file .dsc chi toan banner.
 RE_BANNER = re.compile(
-    r"Oracle GoldenGate .*process (started|stopped), group \w+", re.I)
+    r"Oracle GoldenGate .*process (started|stopped), group \w+"
+    r"|^\s*Process Abending\s*:\s*\d{4}-\d\d-\d\d", re.I)
 
 
 def redact(s: str) -> str:

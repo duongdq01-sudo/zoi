@@ -246,7 +246,23 @@ def listing(con: sqlite3.Connection, stream: str | None = None) -> list[dict]:
         sql += " AND m.stream = ?"
         binds = (stream,)
     sql += " ORDER BY m.stream, m.src_table"
-    return [dict(r) for r in con.execute(sql, binds)]
+    out = [dict(r) for r in con.execute(sql, binds)]
+    # Bang cua LUONG LOG nam o danh sach RIENG (managed_log). Truoc
+    # 2026-10-27 trang nay chi doc managed_table nen nut loc "LOG" luon rong.
+    # Khong co verify_run / so dong cho bang log: dich la lich su, khong doi
+    # chieu 1-1 voi nguon duoc.
+    sql = ("SELECT * FROM managed_log"
+           " WHERE (in_extract=1 OR has_map=1 OR prepared=1)")
+    if stream:
+        sql += " AND stream = ?"
+    # Du MOI khoa ma tables.html doc: template chay StrictUndefined, thieu
+    # src_rows la ca trang 500 (da xay ra ngay lan deploy dau, 2026-10-27).
+    rong = {k: None for k in out[0]} if out else {}
+    rong.update(src_rows=None, tgt_rows=None, v_ts=None, v_matched=None,
+                v_mode=None, v_src=None, v_tgt=None, v_scn=None)
+    out += [{**rong, **dict(r), "la_log": True} for r in con.execute(sql, binds)]
+    out.sort(key=lambda r: (r.get("stream") or "", r["src_table"]))
+    return out
 
 
 # =====================================================================

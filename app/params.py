@@ -419,12 +419,21 @@ def dong_map_log(owner: str, table: str, tgt_owner: str, tgt_table: str) -> str:
     bi xoa (Extract LOGALLSUPCOLS + nguon TRANDATA ALLCOLS).
     OPTYPE co the la INSERT / UPDATE / SQL COMPUPDATE / PK UPDATE / DELETE:
     moi bien the cua UPDATE gop ve 'U'.
-    LOG_TIME khong nam trong COLMAP: cot do DEFAULT SYSDATE o dich.
+    LOG_TIME PHAI co trong COLMAP (@DATENOW = gio may Replicat = may DB
+    dich): bang _LOG khong co khoa nen GG lay MOI cot lam khoa, cot khoa
+    khong duoc map thi abend OGG-00918 'Key column LOG_TIME is missing from
+    map' (2026-10-27). DEFAULT SYSDATE o dich van giu, chi khong dung toi.
+
+    Chuoi hang PHAI la NHAY DON. GG 21.3 doc param theo cu phap ANSI SQL
+    (OGG-02695): "..." la TEN COT. Ban dau dung nhay kep -> checkprm van PASS
+    nhung ban ghi dau tien vao la RLOG abend OGG-00919 'could not find column
+    "GGHEADER"' (gap that 2026-10-27, 24 lan abend + AUTORESTART).
     """
     return (f"MAP {owner}.{table}, TARGET {tgt_owner}.{tgt_table}, INSERTALLRECORDS, "
-            'COLMAP (USEDEFAULTS, LOG_TYPE = @CASE (@GETENV ("GGHEADER", "OPTYPE"), '
-            '"INSERT", "I", "DELETE", "D", "U"), '
-            'COMMIT_TS = @GETENV ("GGHEADER", "COMMITTIMESTAMP"));')
+            "COLMAP (USEDEFAULTS, LOG_TYPE = @CASE (@GETENV ('GGHEADER', 'OPTYPE'), "
+            "'INSERT', 'I', 'DELETE', 'D', 'U'), "
+            "COMMIT_TS = @GETENV ('GGHEADER', 'COMMITTIMESTAMP'), "
+            "LOG_TIME = @DATENOW ());")
 
 
 def them_dong_map_log(text: str, owner: str, table: str, tgt_owner: str,

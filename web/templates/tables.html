@@ -91,7 +91,9 @@
   <td>{{ t.src_rows|songuyen }}</td>
   <td>{{ t.tgt_rows|songuyen }}</td>
   <td>
-    {% if t.v_ts %}
+    {% if t.la_log %}
+      <small class="muted">bảng log - ghi lịch sử, không đối chiếu 1-1</small>
+    {% elif t.v_ts %}
       <span class="{{ "ok" if t.v_matched else "bad" }}">{{ "KHỚP" if t.v_matched else "LỆCH" }}</span>
       <small class="muted">{{ t.v_ts|hhmm }}
         {{ "chuẩn" if t.v_mode == "SNAPSHOT_SCN" else "nhanh" }}</small>
