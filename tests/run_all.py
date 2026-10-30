@@ -38,7 +38,7 @@ MODULES = ["test_gg_parse", "test_safety", "test_params", "test_jobs",
            "test_go_bang", "test_luong_log", "test_ap_rong",
            "test_goi_y_commit", "test_scn_floor", "test_checksum_lob",
            "test_verify_lai", "test_dang_ky_nhieu", "test_tra_cuu",
-           "test_logsize"]
+           "test_logsize", "test_tam_dung", "test_doi_chieu_prm"]
 
 
 def main() -> int:

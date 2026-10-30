@@ -311,3 +311,28 @@ def banner_cua_ca_ba_replicat_deu_duoc_nhan_ra():
               "ORA-01403: no data found",
               "Aborting transaction on ./dirdat/ht beginning at seqno 7"):
         assert not RE_BANNER.search(l), l
+
+
+@test
+def bang_tablespace_tong_quat_gop_dung_datafile():
+    from app.collector import Snapshot
+    s = Snapshot(datafiles=[
+        # BSH_DATA: 2 file autoextend, tran 32 GB moi file
+        {"tablespace_name": "BSH_DATA", "size_mb": 30000, "max_mb": 32768,
+         "room_mb": 2768 + 1000, "free_mb": 1000, "autoextensible": "YES"},
+        {"tablespace_name": "BSH_DATA", "size_mb": 10000, "max_mb": 32768,
+         "room_mb": 22768 + 500, "free_mb": 500, "autoextensible": "YES"},
+        # file KHONG autoextend: maxbytes = 0 -> tran = kich thuoc file
+        {"tablespace_name": "UNDOTBS1", "size_mb": 4096, "max_mb": 0,
+         "room_mb": 3000 - 4096, "free_mb": 3000, "autoextensible": "NO"},
+    ])
+    t = {x["ten"]: x for x in s.tablespaces}
+    assert list(t) == ["BSH_DATA", "UNDOTBS1"]
+    d = t["BSH_DATA"]
+    assert d["so_file"] == 2 and d["da_cap"] == 40000
+    assert d["tran"] == 65536 and d["dung"] == 38500
+    assert d["con"] == 65536 - 38500
+    u = t["UNDOTBS1"]
+    assert u["tran"] == 4096 and u["dung"] == 1096 and u["con"] == 3000
+    assert u["pct"] == round(1096 / 4096 * 100, 1)
+    assert Snapshot().tablespaces == []

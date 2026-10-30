@@ -1,25 +1,23 @@
 {#
-  Khung chung. Menu doc ben TRAI, thanh tren dinh, than trang o giua.
+  Khung chung theo kieu Metronic demo4 (giu mau BSH):
+    - RAY: thanh icon hep 72px ben trai, luon hien.
+    - BANG MENU: kinh mo trong suot, truot ra khi re chuot / focus vao ray
+      hoac bang; nut GHIM giu bang mo va day noi dung sang phai.
+    - Than trang nam trong mot KHUNG TRANG bo goc tren nen xam nhat.
+  Duoi 1024px: an ray, bang menu thanh ngan keo mo bang nut menu o header.
 
   ICON: inline SVG line-icon theo design-system.md muc 7 - KHONG emoji
   (emoji lech net, da mau, khong dieu khien duoc mau bang CSS). Net ve
   dung `currentColor` nen doi mau theo trang thai ma khong sua SVG.
+
+  MENU KHAI MOT CHO (`nhom_menu`): ray, bang menu va breadcrumb deu ve tu
+  danh sach nay - them muc moi chi sua mot dong.
 
   TO SANG TRANG DANG MO: so `request.url.path` voi duong dan cua muc. So
   khop TIEN TO cho trang con (vi du /wizard/3 van sang muc "Quy trinh"),
   rieng muc "/" phai so khop TUYET DOI, khong thi no sang o moi trang.
 #}
 {% set p = request.url.path %}
-{% macro muc(duong, nhan, icon, so=None, khop_tuyet_doi=False) %}
-  {% set dang = (p == duong) if khop_tuyet_doi else p.startswith(duong) %}
-  <a href="{{ duong }}" class="{{ 'dang' if dang else '' }}"
-     {% if dang %}aria-current="page"{% endif %}>
-    {{ icon }}<span>{{ nhan }}</span>
-    {% if so is not none %}
-    <span class="so {{ 'co' if so else '' }}">{{ so }}</span>
-    {% endif %}
-  </a>
-{% endmacro %}
 
 {# --- bo icon, viewBox 24, fill none, stroke-width 1.8 (design-system 7) --- #}
 {% set i_tongquan %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>{% endset %}
@@ -38,75 +36,145 @@
 {% set i_canhbao %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>{% endset %}
 {% set i_vet %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>{% endset %}
 {% set i_huongdan %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.8 9.3a2.3 2.3 0 1 1 3.4 2.1c-.8.5-1.2 1-1.2 1.9"/><path d="M12 17h.01"/></svg>{% endset %}
+{% set i_ghim %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/></svg>{% endset %}
+{% set i_mo_rong %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l6 6-6 6M13 6l6 6-6 6"/></svg>{% endset %}
+{% set i_thu_gon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6l-6 6 6 6M11 6l-6 6 6 6"/></svg>{% endset %}
+{% set i_menu %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>{% endset %}
+{% set i_thoat %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/></svg>{% endset %}
+
+{# --- MENU: (nhom, [(duong, nhan, icon, khop_tuyet_doi, so)]) ---
+   so = None: khong co bong so. '/log' khop TUYET DOI vi la tien to '/logs'. #}
+{% set so_canhbao = (s.alerts | length) if s else 0 %}
+{% set muc_chan_doan = [
+    ('/logs',     'Log',          i_log,      False, None),
+    ('/notify',   'Cảnh báo',     i_canhbao,  False, so_canhbao),
+] %}
+{% if user and user.role == 'ADMIN' %}
+  {% set muc_chan_doan = muc_chan_doan + [('/audit', 'Vết thao tác', i_vet, False, None)] %}
+{% endif %}
+{% set muc_chan_doan = muc_chan_doan + [('/huongdan', 'Hướng dẫn', i_huongdan, False, None)] %}
+{% set nhom_menu = [
+  ('Theo dõi', [
+    ('/',            'Tổng quan',      i_tongquan, True,  None),
+    ('/bieu-do-log', 'Biểu đồ log',    i_bieudolog, False, None),
+    ('/tables',      'Bảng',           i_bang,     False, None),
+    ('/tra-cuu',     'Tra cứu bảng',   i_tracuu,   False, None),
+    ('/verify',      'Đối chiếu',      i_doichieu, False, None),
+    ('/history',     'Lịch sử',        i_lichsu,   False, None),
+  ]),
+  ('Thao tác', [
+    ('/nhanh',       'Thao tác nhanh', i_nhanh,    False, None),
+    ('/log',         'Luồng log',      i_luonglog, True,  None),
+    ('/wizard',      'Quy trình',      i_quytrinh, False, None),
+    ('/control',     'Điều khiển',     i_dieukhien, False, None),
+    ('/params',      'Tham số',        i_thamso,   False, None),
+    ('/jobs',        'Việc chạy',      i_viec,     False, None),
+  ]),
+  ('Chẩn đoán', muc_chan_doan),
+] %}
+{% macro dang_mo(duong, tuyet_doi) %}{{ 'y' if ((p == duong) if tuyet_doi else p.startswith(duong)) else '' }}{% endmacro %}
+
+{# Nhom cua trang dang mo - cho breadcrumb. namespace vi Jinja khong cho
+   vong lap gan bien ra ngoai. #}
+{% set gg_bc = namespace(nhom=None) %}
+{% for nhom, cac_muc in nhom_menu %}{% for m in cac_muc %}
+  {% if dang_mo(m[0], m[3]) and not gg_bc.nhom %}{% set gg_bc.nhom = nhom %}{% endif %}
+{% endfor %}{% endfor %}
 <!doctype html>
-<html lang="vi" data-theme="light">
+<html lang="vi" data-theme="light" class="{% block html_class %}{% endblock %}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}ggadmin{% endblock %}</title>
+{# Dat class ghim TRUOC khi ve trang, khong thi trang nhay tu "ray hep"
+   sang "ghim" sau khi tai xong. localStorage co the bi chan -> try. #}
+<script>try{if(localStorage.getItem("gg.ghim")==="1")document.documentElement.classList.add("ghim")}catch(e){}</script>
 <link rel="stylesheet" href="/static/vendor/pico.min.css">
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/vendor/htmx.min.js" defer></script>
 {# Alpine chi de UI thuan client (bo dem "da chon N bang" o trang Quy trinh).
-   No da duoc vendor san tu dau nhung KHONG he duoc nap, nen cac thuoc tinh
-   `x-data`/`x-show`/`x-text` trong wizard.html im lang khong lam gi. Alpine
-   chi tac dong len element co `x-data`, nen nap toan cuc khong anh huong
-   trang nao khac. #}
+   Alpine chi tac dong len element co `x-data`, nen nap toan cuc khong anh
+   huong trang nao khac. #}
 <script src="/static/vendor/alpine.min.js" defer></script>
 </head>
 <body>
-{# Trang dang nhap khong co menu -> luoi mot cot, khong de trong 15rem #}
+{# Trang dang nhap khong co menu -> mot cot, khong chua cho cho ray #}
 <div class="khung {{ '' if user else 'mot-cot' }}">
 
 {% if user %}
-<aside class="ben">
-  <div class="ben-hieu">
-    <span class="dau" aria-hidden="true">gg</span>
-    <span>
-      <span class="ten">ggadmin</span><br>
-      <span class="phu">GoldenGate &middot; BSH</span>
-    </span>
-  </div>
+<div class="ben">
+  <aside class="ray" aria-label="Thanh icon">
+    <a href="/" class="ray-dau" aria-label="ggadmin - Tổng quan">gg</a>
+      {# Nut MO RONG / THU GON luon hien tren ray (truoc day chi co nut ghim
+         trong bang menu -> thu gon roi thi khong tim thay duong mo lai). #}
+      <button type="button" class="nut-gian" id="nut-gian" aria-pressed="false"
+              title="Mở rộng menu" aria-label="Mở rộng menu">
+        <span class="khi-gon">{{ i_mo_rong }}</span><span class="khi-mo">{{ i_thu_gon }}</span>
+      </button>
+    <nav class="ray-muc" aria-label="Menu nhanh">
+      {% for nhom, cac_muc in nhom_menu %}
+        {% if not loop.first %}<span class="ray-ngan" aria-hidden="true"></span>{% endif %}
+        {% for duong, nhan, icon, td, so in cac_muc %}
+        {% set dang = dang_mo(duong, td) %}
+        <a href="{{ duong }}" class="{{ 'dang' if dang else '' }}" title="{{ nhan }}"
+           aria-label="{{ nhan }}" {% if dang %}aria-current="page"{% endif %}>
+          {{ icon }}
+          {% if so %}<span class="cham" aria-hidden="true"></span>{% endif %}
+        </a>
+        {% endfor %}
+      {% endfor %}
+    </nav>
+    <div class="ray-chan">
+      <span class="avatar" title="{{ user.username }} ({{ user.role }})">{{ (user.username or '?')[:1] | upper }}</span>
+    </div>
+  </aside>
 
-  <nav aria-label="Menu chính">
-    <div class="nhom">Theo dõi</div>
-    {{ muc('/',         'Tổng quan',  i_tongquan, khop_tuyet_doi=True) }}
-    {{ muc('/bieu-do-log', 'Biểu đồ log', i_bieudolog) }}
-    {{ muc('/tables',   'Bảng',       i_bang) }}
-    {{ muc('/tra-cuu',  'Tra cứu bảng', i_tracuu) }}
-    {{ muc('/verify',   'Đối chiếu',  i_doichieu) }}
-    {{ muc('/history',  'Lịch sử',    i_lichsu) }}
-
-    <div class="nhom">Thao tác</div>
-    {{ muc('/nhanh',    'Thao tác nhanh', i_nhanh) }}
-    {# khop TUYET DOI: '/log' la tien to cua '/logs' #}
-    {{ muc('/log',      'Luồng log', i_luonglog, khop_tuyet_doi=True) }}
-    {{ muc('/wizard',   'Quy trình',  i_quytrinh) }}
-    {{ muc('/control',  'Điều khiển', i_dieukhien) }}
-    {{ muc('/params',   'Tham số',    i_thamso) }}
-    {{ muc('/jobs',     'Việc chạy',  i_viec) }}
-
-    <div class="nhom">Chẩn đoán</div>
-    {{ muc('/logs',     'Log',        i_log) }}
-    {{ muc('/notify',   'Cảnh báo',   i_canhbao, so=(s.alerts | length) if s else 0) }}
-    {% if user.role == 'ADMIN' %}
-    {{ muc('/audit',    'Vết thao tác', i_vet) }}
-    {% endif %}
-    {{ muc('/huongdan', 'Hướng dẫn',  i_huongdan) }}
-  </nav>
-
-  <div class="ben-chan">
-    <div class="ai">{{ user.username }}</div>
-    <div>{{ user.role }}</div>
-    <a href="/logout">Thoát</a>
-  </div>
-</aside>
+  <aside class="bang-menu" id="bang-menu" aria-label="Menu chính">
+    <div class="bm-dau">
+      <span>
+        <span class="ten">ggadmin</span>
+        <span class="phu">GoldenGate &middot; BSH</span>
+      </span>
+      <button type="button" class="nut-ghim" id="nut-ghim" aria-pressed="false"
+              title="Ghim menu" aria-label="Ghim menu">
+        <span class="khi-gon">{{ i_ghim }}</span><span class="khi-mo">{{ i_thu_gon }}</span>
+      </button>
+    </div>
+    <nav>
+      {% set gg_dem = namespace(i=0) %}
+      {% for nhom, cac_muc in nhom_menu %}
+      <div class="nhom">{{ nhom }}</div>
+        {% for duong, nhan, icon, td, so in cac_muc %}
+        {% set dang = dang_mo(duong, td) %}
+        {% set gg_dem.i = gg_dem.i + 1 %}
+        <a href="{{ duong }}" class="{{ 'dang' if dang else '' }}" style="--i:{{ gg_dem.i }}"
+           {% if dang %}aria-current="page"{% endif %}>
+          {{ icon }}<span>{{ nhan }}</span>
+          {% if so is not none %}<span class="so {{ 'co' if so else '' }}">{{ so }}</span>{% endif %}
+        </a>
+        {% endfor %}
+      {% endfor %}
+    </nav>
+    <div class="bm-chan">
+      <span class="avatar">{{ (user.username or '?')[:1] | upper }}</span>
+      <span class="ai">{{ user.username }}<small>{{ user.role }}</small></span>
+      <a href="/logout" class="thoat" title="Thoát" aria-label="Thoát">{{ i_thoat }}</a>
+    </div>
+  </aside>
+  <div class="phu-mo" id="phu-mo" aria-hidden="true"></div>
+</div>
 {% endif %}
 
 <div class="chinh">
   {% if user %}
   <header class="tren">
-    <div>
+    <button type="button" class="nut-menu" id="nut-menu" aria-controls="bang-menu"
+            aria-expanded="false" aria-label="Mở menu">{{ i_menu }}</button>
+    <div class="tieu-de">
+      <nav class="vet-duong" aria-label="Breadcrumb">
+        <a href="/">ggadmin</a>
+        {% if gg_bc.nhom %}<span aria-hidden="true">/</span><span>{{ gg_bc.nhom }}</span>{% endif %}
+      </nav>
       {# Ten trang lay tu <title>, cat phan " &mdash; ggadmin" o duoi. Nho
          vay moi trang chi khai ten o MOT cho, khong phai hai. #}
       <h1>{% block ten_trang %}{{ self.title().split('&mdash;')[0].strip() }}{% endblock %}</h1>
@@ -114,7 +182,7 @@
     </div>
     <div class="phai">
       {% if s and s.read_only %}
-      <span class="bad"><strong>CHỈ ĐỌC</strong></span>
+      <span class="pill bad">CHỈ ĐỌC</span>
       {% endif %}
       <span class="nhip">
         <span class="den {{ 'nguy' if (s and (s.alerts or not s.ts)) else '' }}"
@@ -172,6 +240,43 @@ document.body.addEventListener("htmx:beforeSwap", function (e) {
     e.detail.isError = false;
   }
 });
+
+// Menu: ghim (luu localStorage) va ngan keo tren man hinh hep.
+(function () {
+  var html = document.documentElement;
+  var ghim = document.getElementById("nut-ghim");
+  var gian = document.getElementById("nut-gian");
+  var nutMenu = document.getElementById("nut-menu");
+  var phu = document.getElementById("phu-mo");
+  if (!ghim) return;                      // trang dang nhap: khong co menu
+  // Hai nut cung mot viec: nut-gian tren ray (luon thay), nut-ghim trong bang menu.
+  function veGhim() {
+    var mo = html.classList.contains("ghim");
+    var nhan = mo ? "Thu gọn menu" : "Mở rộng menu";
+    [ghim, gian].forEach(function (b) {
+      if (!b) return;
+      b.setAttribute("aria-pressed", mo ? "true" : "false");
+      b.setAttribute("title", nhan); b.setAttribute("aria-label", nhan);
+    });
+  }
+  veGhim();
+  function doiGhim() {
+    var bat = html.classList.toggle("ghim");
+    try { localStorage.setItem("gg.ghim", bat ? "1" : "0"); } catch (e) {}
+    veGhim();
+  }
+  ghim.addEventListener("click", doiGhim);
+  if (gian) gian.addEventListener("click", doiGhim);
+  function moNganKeo(mo) {
+    html.classList.toggle("menu-mo", mo);
+    nutMenu.setAttribute("aria-expanded", mo ? "true" : "false");
+  }
+  nutMenu.addEventListener("click", function () { moNganKeo(!html.classList.contains("menu-mo")); });
+  phu.addEventListener("click", function () { moNganKeo(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && html.classList.contains("menu-mo")) moNganKeo(false);
+  });
+})();
 </script>
 </body>
 </html>

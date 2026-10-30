@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_vong.html" import vong_chay %}
 {% block title %}Việc chạy &mdash; ggadmin{% endblock %}
 {% block body %}
 <h3>Việc chạy nền</h3>
@@ -21,7 +22,7 @@ giám sát sẽ gây ra sự cố nó đang giám sát.</small></p>
   <td>{{ j.id }}</td>
   <td><code>{{ j.kind }}</code></td>
   <td class="{{ 'ok' if j.state == 'SUCCEEDED' else ('bad' if j.state in ('FAILED','KILLED') else 'warn') }}">
-    {{ j.state }}</td>
+    {% if j.state in ('QUEUED','RUNNING') %}<span class="co-vong">{{ vong_chay('1.2rem', 'Việc đang chạy') }}{{ j.state }}</span>{% else %}{{ j.state }}{% endif %}</td>
   <td>{{ j.created_at|hhmm }}</td>
   <td>{{ j.finished_at|hhmm if j.finished_at else '-' }}</td>
   <td>{{ j.created_by }}</td>

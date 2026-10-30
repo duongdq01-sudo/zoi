@@ -1,3 +1,4 @@
+{% from "_vong.html" import vong_chay %}
 {# Trang thai job ROI RA cua buoc wizard dang CHO. htmx poll moi 10s. #}
 <article class="xacnhan {{ 'l1' if r.state in ('QUEUED','RUNNING') else '' }}"
   {% if r.state in ('QUEUED','RUNNING') %}
@@ -7,7 +8,8 @@
     <strong>Bước {{ no }} &mdash; việc chạy nền
       {% if r.job %}#{{ r.job.id }} <code>{{ r.job.kind }}</code>{% endif %}
     </strong>
-    <span class="{{ 'ok' if r.state == 'PASS' else ('bad' if r.state == 'FAIL' else 'warn') }}">
+    <span class="{{ 'ok' if r.state == 'PASS' else ('bad' if r.state == 'FAIL' else 'warn') }} co-vong">
+      {%- if r.state in ('QUEUED','RUNNING') %}{{ vong_chay('1.8rem', 'Việc nền đang chạy') }}{% endif %}
       {{ r.state }}</span>
   </header>
 

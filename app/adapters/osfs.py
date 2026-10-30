@@ -176,11 +176,13 @@ async def a_snapshot(cfg) -> dict:
             "abend_today": abend_count_today(cfg),
             "plaintext_pw": param_plaintext_password_count(cfg),
             "credstore": credential_store_ok(cfg),
+            # Moi luong: (so dong TABLE cua extract, so dong MAP cua replicat).
+            # Truoc 2026-10-30 dem 6 file co dinh roi so voi hang so viet tay
+            # -> them bang vao luong la dashboard bao lech mai.
             "param_counts": {
-                p: _count_kw(cfg.param_file(p), kw)
-                for p, kw in (("etpmnv", "TABLE"), ("etht", "TABLE"),
-                              ("etdthu", "TABLE"), ("rpmnvods", "MAP"),
-                              ("rht", "MAP"), ("rdthu", "MAP"))
+                sid: (_count_kw(cfg.param_file(v["extract"]), "TABLE"),
+                      _count_kw(cfg.param_file(v["replicat"]), "MAP"))
+                for sid, v in streams.items()
             },
         }
     return await asyncio.to_thread(_work)

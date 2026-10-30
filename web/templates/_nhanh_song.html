@@ -1,4 +1,5 @@
 {% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{% from "_vong.html" import vong_chay %}
 {#
   Theo doi SONG mot luot thao tac nhanh. Fragment htmx, tu cap nhat 3s.
 
@@ -48,7 +49,7 @@
     <span class="pill {{ 'bad' if dung else ('warn' if p.dang_chay else '') }}"
           style="float:right">
       {% if dung %}ĐÃ DỪNG
-      {% elif p.dang_chay %}ĐANG CHẠY TỰ ĐỘNG
+      {% elif p.dang_chay %}<span class="co-vong">{{ vong_chay('1.15rem') }}ĐANG CHẠY TỰ ĐỘNG</span>
       {% else %}ĐANG MỞ, không tự chạy{% endif %}
     </span>
   </header>
@@ -76,7 +77,8 @@
     <summary>
       <code>{{ '%02d'|format(b.step_no) }}</code>
       <strong>{{ b.nhan }}</strong>
-      <span class="{{ 'ok' if b.state == 'PASS' else ('bad' if b.state == 'FAIL' else 'warn') }}">
+      <span class="{{ 'ok' if b.state == 'PASS' else ('bad' if b.state == 'FAIL' else 'warn') }} co-vong">
+        {%- if b.state == 'DANG' %}{{ vong_chay('1.6rem', 'Bước đang chạy') }}{% endif %}
         {{ {'PASS':'xong','FAIL':'lỗi','DANG':'đang chạy'}.get(b.state, b.state) }}</span>
       <small class="muted">
         {% if b.started_at %}{{ b.started_at|hhmm }}{% endif %}

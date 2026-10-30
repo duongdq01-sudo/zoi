@@ -115,10 +115,12 @@
   {% set khoe = ext and rep and ext.is_running and rep.is_running
                 and (dsc.get('so_dong_la', 0) or 0) == 0 %}
   <article style="border-left:5px solid {{ 'var(--success)' if khoe else 'var(--danger)' }}">
-    <header>
-      <strong>Luồng {{ sid }}</strong>
-      <small class="muted">&nbsp;{{ st.ten }}</small>
-      <span class="pill {{ 'ok' if khoe else 'bad' }}" style="float:right">
+    <header class="the-luong">
+      <div>
+        <strong>Luồng {{ sid }}</strong>
+        <small class="muted">{{ st.ten }}</small>
+      </div>
+      <span class="pill {{ 'ok' if khoe else 'bad' }}">
         {{ 'BÌNH THƯỜNG' if khoe else 'CẦN XEM' }}</span>
     </header>
     <div class="kv">
@@ -225,7 +227,37 @@
 </div>
 
 <article>
-  <header><strong>Datafile của hai vùng lưu trữ</strong></header>
+  <header><strong>Tablespace - tổng quát</strong></header>
+  <table role="grid" class="bang-ts">
+  <thead><tr><th>Tablespace</th><th>File</th><th>Đã dùng</th><th>Còn lại</th>
+    <th>Trần (MAX)</th><th>Đã cấp trên đĩa</th><th style="width:28%">Mức dùng</th></tr></thead>
+  <tbody>
+  {% for t in s.tablespaces %}
+    {% set muc = 'bad' if t.pct >= 95 else ('warn' if t.pct >= 85 else 'ok') %}
+    <tr>
+      <td><strong>{{ t.ten }}</strong></td>
+      <td>{{ t.so_file }}</td>
+      <td>{{ '%.1f'|format(t.dung / 1024) }} GB</td>
+      <td class="{{ muc if muc != 'ok' else '' }}">{{ '%.1f'|format(t.con / 1024) }} GB</td>
+      <td>{{ '%.1f'|format(t.tran / 1024) }} GB</td>
+      <td><small class="muted">{{ '%.1f'|format(t.da_cap / 1024) }} GB</small></td>
+      <td>
+        <div class="thanh-dung"><span class="{{ muc }}" style="width:{{ [t.pct, 100]|min }}%"></span></div>
+        <small class="{{ muc if muc != 'ok' else 'muted' }}">{{ t.pct }}%</small>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7"><small class="muted">chưa đo được</small></td></tr>
+  {% endfor %}
+  </tbody></table>
+  <p><small class="muted">Đã dùng = đã cấp trên đĩa − chỗ trống bên trong file.
+  Còn lại = trần MAXSIZE − đã dùng (tính cả phần file còn tự nới được).
+  Vàng từ 85%, đỏ từ 95%. Với UNDO, extent đã hết hạn được tính là chỗ trống
+  vì Oracle tái dùng được ngay.</small></p>
+</article>
+
+<article>
+  <header><strong>Datafile chi tiết</strong></header>
   <table role="grid">
   <thead><tr><th>Datafile</th><th>Đang dùng</th><th>Tối đa (MAX)</th><th>Còn nới được</th></tr></thead>
   <tbody>

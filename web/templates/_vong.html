@@ -1,0 +1,15 @@
+{# Vong quay "dang chay" (y tu svg-frame cua Nawsome tren Uiverse), CSS o
+   style.css khoi "HIEU UNG". Chi dat canh trang thai DANG/RUNNING de nguoi
+   xem biet viec van dang chay. Dung class, khong dung id: mot trang co the co
+   nhieu vong. Ngan ke tren `fill`, `transform-origin` = tam viewBox. #}
+{% macro vong_chay(co='1.25rem', nhan='Đang chạy') -%}
+<svg class="vong-chay" viewBox="0 0 48 48" style="width:{{ co }};height:{{ co }}"
+     role="img" aria-label="{{ nhan }}"><title>{{ nhan }}</title>
+  <circle class="v-ngoai" cx="24" cy="24" r="21" stroke-width="2" stroke-dasharray="5 4"/>
+  <circle class="v-cung" cx="24" cy="24" r="21" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="30 102"/>
+  <circle class="v-trong" cx="24" cy="24" r="14" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="22 66"/>
+  <circle class="v-trong2" cx="24" cy="24" r="14" stroke-width="1.6" stroke-dasharray="2 5"/>
+  <circle class="v-tam" cx="24" cy="16.5" r="2.6"/>
+  <circle class="v-loi" cx="24" cy="24" r="3.4"/>
+</svg>
+{%- endmacro %}

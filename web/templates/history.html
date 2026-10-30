@@ -48,8 +48,12 @@
 // Chi 3 loai do thi nen viet truc tiep, khong can wrapper nang.
 // uPlot thay vi Chart.js: 47 KB so voi ~200 KB, va ve hang chuc nghin diem
 // khong nghen - poll 30s x nhieu metric x nhieu ngay thi dung la hang chuc nghin.
-const MAU = ["#1E88E5","#e74c3c","#26a65b","#e67e22","#9b59b6",
-             "#16a085","#f1c40f","#7f8c8d","#2c3e50","#d35400","#2980b9"];
+// Mau sang cho nen toi (giao dien AI Aurora 2026-10-30); truc/luoi uPlot
+// ve tren canvas nen CSS khong doi duoc - phai dat mau o day.
+const MAU = ["#60a5fa","#f87171","#34d399","#fbbf24","#a78bfa",
+             "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"];
+const TRUC = { stroke: "#97a3bd", grid: { stroke: "rgba(148,163,184,.10)" },
+               ticks: { stroke: "rgba(148,163,184,.18)" } };
 
 function ve(d) {
   const el = document.getElementById("chart");
@@ -78,7 +82,7 @@ function ve(d) {
   new uPlot({
     width: el.clientWidth || 900, height: 320,
     scales: { x: { time: true } },
-    axes: [{}, { label: d.don_vi }],
+    axes: [{ ...TRUC }, { ...TRUC, label: d.don_vi }],
     series: sers,
     legend: { live: true },
   }, data, el);

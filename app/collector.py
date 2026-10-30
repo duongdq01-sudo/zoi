@@ -23,6 +23,21 @@ from .adapters import gg, osfs
 log = logging.getLogger("ggadmin.collector")
 
 
+def process_tam_dung(cfg) -> set[str]:
+    """Extract/Replicat cua cac luong co `tam_dung = true` trong [streams.X].
+
+    Luong dung CO Y (2026-10-30: luong DT dung vi job tong hop 3 bang doanh
+    thu da chuyen sang chay tren ODS) khong duoc bao process_khong_running
+    hay lag moi phut - mot canh bao khong bao gio tat se lam mat phan xa
+    voi canh bao that. Bo co nay ra la canh bao tro lai ngay.
+    """
+    out: set[str] = set()
+    for st in (cfg.streams or {}).values():
+        if st.get("tam_dung") is True:
+            out |= {p.upper() for p in (st.get("extract"), st.get("replicat")) if p}
+    return out
+
+
 @dataclass
 class Snapshot:
     ts: int = 0
@@ -51,11 +66,40 @@ class Snapshot:
     def age_s(self) -> int:
         return max(0, int(time.time()) - self.ts) if self.ts else -1
 
+    @property
+    def tablespaces(self) -> list[dict]:
+        """Gop `datafiles` theo tablespace cho bang tong quat o trang chu.
 
-# Ky vong - lech la co van de, hien ngay tren dashboard
-EXPECT_PARAM = {"etpmnv": 52, "etht": 18, "etdthu": 3,
-                "rpmnvods": 52, "rht": 18, "rdthu": 3}
-EXPECT_PREPARED = 73
+        - da_cap: tong kich thuoc file hien tai (dba_data_files.bytes)
+        - tran:   tong MAXSIZE; file khong autoextend thi tran = kich thuoc
+        - dung:   da_cap - free (dba_free_space). Voi UNDO, extent EXPIRED
+                  duoc tinh la free - dung y nghia "con tai dung duoc".
+        - con:    tran - dung
+        """
+        agg: dict[str, dict] = {}
+        for d in self.datafiles:
+            size = float(d.get("size_mb") or 0)
+            mx = float(d.get("max_mb") or 0)
+            tran = max(mx, size) if d.get("autoextensible") == "YES" else size
+            if d.get("free_mb") is not None:
+                free = float(d["free_mb"] or 0)
+            else:   # snapshot cu chua co free_mb: suy tu room
+                free = max(0.0, float(d.get("room_mb") or 0) - (mx - size))
+            a = agg.setdefault(d["tablespace_name"], {
+                "ten": d["tablespace_name"], "so_file": 0,
+                "da_cap": 0.0, "tran": 0.0, "dung": 0.0})
+            a["so_file"] += 1
+            a["da_cap"] += size
+            a["tran"] += tran
+            a["dung"] += size - free
+        out = []
+        for a in agg.values():
+            a["con"] = a["tran"] - a["dung"]
+            a["pct"] = round(a["dung"] / a["tran"] * 100, 1) if a["tran"] else 0.0
+            out.append(a)
+        return sorted(out, key=lambda a: a["ten"])
+
+
 READ_ONLY_GB = 25.0
 
 
@@ -277,7 +321,10 @@ class Collector:
         t_nang = th("lag_replicat_nang", 1800)
         t_lag = th("lag_replicat_canh_bao", 300)
         t_run = th("process_khong_running", 1)
+        bo_qua = process_tam_dung(self.cfg)
         for p in s.procs:
+            if p.name in bo_qua:
+                continue
             if t_run is not None and not p.is_running:
                 fired.append(("process_khong_running", p.name, 0.0))
             if p.program == "REPLICAT" and p.lag_s is not None:
@@ -409,15 +456,25 @@ class Collector:
 
     # ------------------------------------------------------------- doi chieu
     def param_mismatch(self) -> list[str]:
-        """Lech so TABLE/MAP so voi ky vong, va so bang prepared."""
+        """Moi luong: so TABLE cua extract phai bang so MAP cua replicat.
+
+        Truoc 2026-10-30 so voi HANG SO viet tay luc dung he thong (etht 18,
+        TRANDATA 73...) - them bang qua quy trinh la bao lech vinh vien du
+        compare khop. Bang MAP ma chua bat TRANDATA da co canh bao rieng
+        `bang_map_khong_prepared` (doi chieu theo TUNG bang), nen khong so
+        tong so bang prepared nua: con so do gom ca bang da bat TRANDATA ma
+        khong nam trong luong nao, khong co gia tri "dung" co dinh.
+        """
         out = []
-        for k, want in EXPECT_PARAM.items():
-            got = self.snap.param_counts.get(k)
-            if got is not None and got != want:
-                out.append(f"{k}.prm có {got} dòng, mong đợi {want}")
-        if self.snap.prepared and self.snap.prepared != EXPECT_PREPARED:
-            out.append(f"số bảng đã bật TRANDATA ở nguồn = {self.snap.prepared}, mong đợi "
-                       f"{EXPECT_PREPARED}")
+        for sid, (n_tab, n_map) in sorted(self.snap.param_counts.items()):
+            st = self.cfg.streams.get(sid) or {}
+            ext, rep = st.get("extract", "?"), st.get("replicat", "?")
+            if n_tab < 0 or n_map < 0:
+                thieu = [f"{p.lower()}.prm" for p, n in ((ext, n_tab), (rep, n_map)) if n < 0]
+                out.append(f"luồng {sid}: không đọc được {', '.join(thieu)}")
+            elif n_tab != n_map:
+                out.append(f"luồng {sid}: {ext.lower()}.prm có {n_tab} dòng TABLE nhưng "
+                           f"{rep.lower()}.prm có {n_map} dòng MAP")
         if self.snap.plaintext_pw > 0:
             out.append(f"{self.snap.plaintext_pw} file tham số còn mật khẩu để dạng rõ (phải là "
                        "0)")

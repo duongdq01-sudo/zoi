@@ -36,12 +36,14 @@ echo "  test: sach"
 find app web -name '*.py' -o -name '*.html' -o -name '*.css' -o -name '*.js' | while read -r f; do
   sed -i 's/\r$//' "$f" 2>/dev/null || true
 done
-$SSH "$H" "mkdir -p $D/app/adapters $D/app/routers $D/web/templates $D/web/static/vendor $D/tests/fixtures $D/tools"
+$SSH "$H" "mkdir -p $D/app/adapters $D/app/routers $D/web/templates $D/web/static/vendor $D/web/static/img $D/tests/fixtures $D/tools"
 $SCP -q -r app/*.py                  "$H:$D/app/"
 $SCP -q -r app/adapters/*.py         "$H:$D/app/adapters/"
 $SCP -q    app/routers/__init__.py   "$H:$D/app/routers/" 2>/dev/null || true
 $SCP -q -r web/templates/*.html      "$H:$D/web/templates/"
 $SCP -q    web/static/style.css      "$H:$D/web/static/"
+# anh nen giao dien kinh (2026-10-30, ve bang tools/tao_nen.py)
+$SCP -q    web/static/img/*          "$H:$D/web/static/img/"
 # tools/: job_connect.py + job_done.py duoc CHINH TIEN TRINH JOB goi, nen
 # chung PHAI co tren server; backup_db.py do cron goi. Thieu mot file la job
 # chay xong ma khong ai cap nhat trang thai.

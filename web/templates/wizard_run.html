@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_nut_khoiphuc.html" import nut_khoiphuc %}
+{% from "_vong.html" import vong_chay %}
 {% block title %}Quy trình #{{ run.id }} &mdash; ggadmin{% endblock %}
 {% block body %}
 {#
@@ -90,8 +91,9 @@
   </td>
   <td><code>{{ b.level }}</code></td>
   <td class="{{ 'ok' if b.state == 'PASS' else ('bad' if b.state == 'FAIL' else ('warn' if b.state == 'DANG' else 'muted')) }}">
+    {% if b.state == 'DANG' %}<span class="co-vong">{{ vong_chay('1.4rem', 'Bước đang chạy') }}{% endif %}
     {{ {'PASS': 'xong', 'FAIL': 'lỗi', 'DANG': 'đang chạy',
-        'CHO': 'chờ', 'BO_QUA': 'bỏ qua'}.get(b.state, b.state) }}</td>
+        'CHO': 'chờ', 'BO_QUA': 'bỏ qua'}.get(b.state, b.state) }}{% if b.state == 'DANG' %}</span>{% endif %}</td>
   <td><small>{{ b.by_user or '' }}</small></td>
   <td><small>{{ b.reason or '' }}</small></td>
 </tr>

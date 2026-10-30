@@ -1,15 +1,51 @@
 {% extends "base.html" %}{% block title %}Đăng nhập &mdash; ggadmin{% endblock %}
+{# Theo mau "Glassmorphism Login" (Dribbble): card kinh tren anh nen, CSS o
+   style.css khoi "TRANG DANG NHAP". "Ghi nho" chi luu TEN tai khoan o
+   localStorage cua trinh duyet - KHONG luu mat khau, khong keo dai phien. #}
+{% block html_class %}trang-login{% endblock %}
 {% block body %}
-<article style="max-width:26rem;margin:4rem auto">
-  <h3>ggadmin</h3>
-  <p><small>Quản trị Oracle GoldenGate &mdash; BSH</small></p>
-  {% if loi %}<p class="err"><strong>{{ loi }}</strong></p>{% endif %}
-  <form method="post" action="/login">
-    <input name="username" placeholder="Tài khoản" autofocus autocomplete="username">
-    <input name="password" type="password" placeholder="Mật khẩu" autocomplete="current-password">
-    <button type="submit">Đăng nhập</button>
+<section class="dn-the" aria-labelledby="dn-tieu-de">
+  <h1 id="dn-tieu-de">Đăng nhập</h1>
+  <p class="dn-phu">Chào mừng quay lại, đăng nhập để quản trị GoldenGate</p>
+  {% if loi %}<p class="dn-loi" role="alert"><strong>{{ loi }}</strong></p>{% endif %}
+  <form method="post" action="/login" id="dn-form">
+    <div class="dn-o">
+      <input name="username" id="dn-user" placeholder="Tài khoản" aria-label="Tài khoản"
+             autofocus autocomplete="username" required>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    </div>
+    <div class="dn-o">
+      <input name="password" id="dn-pass" type="password" placeholder="Mật khẩu" aria-label="Mật khẩu"
+             autocomplete="current-password" required>
+      <button type="button" class="dn-mat" id="dn-mat" aria-label="Hiện mật khẩu" aria-pressed="false">
+        <svg id="dn-mat-an" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.4 10.4 0 0 1 12 5c5 0 9 4.5 10 7-.4 1-1.3 2.4-2.6 3.7M6.5 6.6C4.3 8 2.8 10 2 12c1 2.5 5 7 10 7 1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+        <svg id="dn-mat-hien" hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12c1-2.5 5-7 10-7s9 4.5 10 7c-1 2.5-5 7-10 7S3 14.5 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <label class="dn-nho"><input type="checkbox" id="dn-nho"> Ghi nhớ tài khoản</label>
+    <button type="submit" class="dn-nut">Đăng nhập</button>
   </form>
-  <small>Vào được qua đường hầm SSH đã là lớp xác thực thứ nhất; đăng nhập ở
-  đây là lớp thứ hai, để phân biệt ai làm gì trong vết thao tác.</small>
-</article>
+  <small class="dn-chu">Lớp xác thực thứ hai sau <strong>đường hầm SSH</strong></small>
+</section>
+<script>
+(function () {
+  var u = document.getElementById("dn-user"), p = document.getElementById("dn-pass");
+  var nho = document.getElementById("dn-nho"), mat = document.getElementById("dn-mat");
+  try {
+    var t = localStorage.getItem("gg.tk");
+    if (t) { u.value = t; nho.checked = true; p.focus(); }
+  } catch (e) {}
+  document.getElementById("dn-form").addEventListener("submit", function () {
+    try { if (nho.checked) localStorage.setItem("gg.tk", u.value); else localStorage.removeItem("gg.tk"); } catch (e) {}
+  });
+  mat.addEventListener("click", function () {
+    var hien = p.type === "password";
+    p.type = hien ? "text" : "password";
+    mat.setAttribute("aria-pressed", hien ? "true" : "false");
+    mat.setAttribute("aria-label", hien ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+    document.getElementById("dn-mat-an").hidden = hien;
+    document.getElementById("dn-mat-hien").hidden = !hien;
+  });
+})();
+</script>
 {% endblock %}

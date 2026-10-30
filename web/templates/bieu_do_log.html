@@ -216,8 +216,12 @@
 <script src="/static/vendor/uplot.iife.min.js"></script>
 <script>
 // Cung bang mau voi trang Lich su.
-const MAU = ["#1E88E5","#e74c3c","#26a65b","#e67e22","#9b59b6",
-             "#16a085","#f1c40f","#7f8c8d","#2c3e50","#d35400","#2980b9"];
+// Mau sang cho nen toi (giao dien AI Aurora 2026-10-30); truc/luoi uPlot
+// ve tren canvas nen CSS khong doi duoc - phai dat mau o day.
+const MAU = ["#60a5fa","#f87171","#34d399","#fbbf24","#a78bfa",
+             "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"];
+const TRUC = { stroke: "#97a3bd", grid: { stroke: "rgba(148,163,184,.10)" },
+               ticks: { stroke: "rgba(148,163,184,.18)" } };
 
 function bytesVN(n) {
   if (n == null) return "-";
@@ -281,7 +285,7 @@ function veNhom(d) {
   new uPlot({
     width: el.clientWidth || 900, height: 320,
     scales: { x: { time: true } },
-    axes: [{}, { values: (u, vals) => vals.map(bytesVN), size: 70 }],
+    axes: [{ ...TRUC }, { ...TRUC, values: (u, vals) => vals.map(bytesVN), size: 70 }],
     series: sers,
     legend: { live: true },
     cursor: { points: { show: false } },
@@ -332,13 +336,13 @@ function veDia(d) {
   new uPlot({
     width: el.clientWidth || 900, height: 320,
     scales: { x: { time: true }, y: { range: (u, mn, mx) => [0, Math.max(tong * 1.04, mx)] } },
-    axes: [{}, { label: "GB", values: (u, vals) => vals.map(v => v.toFixed(0)) }],
+    axes: [{ ...TRUC }, { ...TRUC, label: "GB", values: (u, vals) => vals.map(v => v.toFixed(0)) }],
     series: [
       {},
-      { label: "Đã dùng", stroke: "#1E88E5", width: 1.8, fill: "rgba(30,136,229,.12)", value: (u, v) => gbVN(v) },
-      { label: "Dự báo", stroke: "#1E88E5", width: 1.5, dash: [6, 5], value: (u, v) => gbVN(v) },
-      { label: "Ngưỡng chỉ đọc", stroke: "#e67e22", width: 1.4, dash: [2, 4], value: (u, v) => gbVN(v) },
-      { label: "Dung lượng đĩa", stroke: "#e74c3c", width: 1.4, value: (u, v) => gbVN(v) },
+      { label: "Đã dùng", stroke: "#60a5fa", width: 1.8, fill: "rgba(96,165,250,.14)", value: (u, v) => gbVN(v) },
+      { label: "Dự báo", stroke: "#60a5fa", width: 1.5, dash: [6, 5], value: (u, v) => gbVN(v) },
+      { label: "Ngưỡng chỉ đọc", stroke: "#fbbf24", width: 1.4, dash: [2, 4], value: (u, v) => gbVN(v) },
+      { label: "Dung lượng đĩa", stroke: "#f87171", width: 1.4, value: (u, v) => gbVN(v) },
     ],
     legend: { live: true },
   }, data, el);

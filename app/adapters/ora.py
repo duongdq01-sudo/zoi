@@ -256,6 +256,7 @@ class Ora:
                    ROUND(d.bytes/1048576)                      size_mb,
                    ROUND(d.maxbytes/1048576)                   max_mb,
                    ROUND((d.maxbytes - d.bytes + NVL(f.free,0))/1048576) room_mb,
+                   ROUND(NVL(f.free,0)/1048576)                free_mb,
                    d.autoextensible
               FROM dba_data_files d
               LEFT JOIN (SELECT file_id, SUM(bytes) free
