@@ -23,7 +23,7 @@
   --dai-troi:linear-gradient(135deg,#0284C7 0%,#0F766E 100%);
   /* --- Semantic: trang thai, khong phai brand --- */
   --success:#047857; --success-bg:#DCFCEF;
-  --danger:#D1213F;  --danger-bg:#FFE7EC;
+  --danger:#C81E3A;  --danger-bg:#FFE7EC;
   --warning:#B45309; --warning-bg:#FFF2D4;
   --info:#0369A1;    --info-bg:#EEF9FF;
   /* --- Neutral --- */
@@ -139,7 +139,6 @@ body { background:var(--nen-trang); color:var(--slate-600); margin:0; }
   min-height:100vh;
   transition:grid-template-columns 220ms cubic-bezier(.2,.8,.2,1);
 }
-html.ghim .khung { grid-template-columns:calc(var(--ray-w) + var(--bang-w)) minmax(0,1fr); }
 
 /* Trang dang nhap: khong co menu nen luoi ve mot cot */
 .khung.mot-cot { grid-template-columns:1fr; }
@@ -212,11 +211,13 @@ html.ghim .khung { grid-template-columns:calc(var(--ray-w) + var(--bang-w)) minm
 /* MO: khong tre, cac muc truot vao lech nhau theo --i */
 /* html.vua-gon: vua bam thu gon, chuot con nam tren menu. Khong co class nay thi
    luat :hover giu menu mo va nut thu gon nhu khong co tac dung. */
-html:not(.vua-gon) .ben:hover .bang-menu,
-html:not(.vua-gon) .ben:has(:focus-visible) .bang-menu, html.ghim .bang-menu {
-  transform:none; opacity:1; visibility:visible; pointer-events:auto;
-  transition:transform 240ms cubic-bezier(.2,.8,.2,1),
-             opacity 200ms ease, visibility 0s;
+@media (min-width:1024px) {
+  html:not(.vua-gon) .ben:hover .bang-menu,
+  html:not(.vua-gon) .ben:has(:focus-visible) .bang-menu, html.ghim .bang-menu {
+    transform:none; opacity:1; visibility:visible; pointer-events:auto;
+    transition:transform 240ms cubic-bezier(.2,.8,.2,1),
+               opacity 200ms ease, visibility 0s;
+  }
 }
 html.ghim .bang-menu { box-shadow:none; background:var(--white);
                        -webkit-backdrop-filter:none; backdrop-filter:none; }
@@ -225,11 +226,13 @@ html.ghim .bang-menu { box-shadow:none; background:var(--white);
   transition:opacity 200ms ease, transform 240ms cubic-bezier(.2,.8,.2,1),
              background var(--motion-fast), color var(--motion-fast);
 }
-html:not(.vua-gon) .ben:hover .bang-menu nav a,
-html:not(.vua-gon) .ben:has(:focus-visible) .bang-menu nav a,
-html.ghim .bang-menu nav a {
-  opacity:1; transform:none;
-  transition-delay:calc(var(--i, 0) * 14ms), calc(var(--i, 0) * 14ms), 0s, 0s;
+@media (min-width:1024px) {
+  html:not(.vua-gon) .ben:hover .bang-menu nav a,
+  html:not(.vua-gon) .ben:has(:focus-visible) .bang-menu nav a,
+  html.ghim .bang-menu nav a {
+    opacity:1; transform:none;
+    transition-delay:calc(var(--i, 0) * 14ms), calc(var(--i, 0) * 14ms), 0s, 0s;
+  }
 }
 
 .bm-dau { display:flex; align-items:center; justify-content:space-between;
@@ -333,7 +336,7 @@ footer.chan {
 
 /* Duoi 1024px: an ray, bang menu thanh ngan keo mo bang nut o header */
 @media (max-width:1023px) {
-  .khung, html.ghim .khung { grid-template-columns:1fr; }
+  .khung { grid-template-columns:1fr; }
   .chinh { grid-column:1; margin:0; border:0; border-radius:0; }
   .tren, footer.chan { border-radius:0; }
   .ben { position:static; height:0; }
@@ -342,10 +345,9 @@ footer.chan {
                transform:translateX(-100%); opacity:1; visibility:hidden;
                pointer-events:none;
                transition:transform 240ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 240ms; }
-  html.menu-mo .bang-menu, html.menu-mo .ben:hover .bang-menu {
+  html.menu-mo .bang-menu {
     transform:none; visibility:visible; pointer-events:auto;
     transition:transform 240ms cubic-bezier(.2,.8,.2,1), visibility 0s; }
-  .ben:hover .bang-menu { transform:translateX(-100%); visibility:hidden; pointer-events:none; }
   .bang-menu nav a { opacity:1; transform:none; }
   .nut-ghim { display:none; }
   .nut-menu { display:grid; place-items:center; min-height:0; width:2.4rem;
@@ -732,7 +734,9 @@ body {
                                  border-color:var(--orange-200); }
 .bm-chan .thoat { border-radius:12px; }
 .bm-chan .thoat:hover { background:var(--danger-bg); color:var(--danger); }
-html.ghim .khung { grid-template-columns:calc(var(--ray-w) + var(--bang-w) + 2px) minmax(0,1fr); }
+@media (min-width:1024px) {
+  html.ghim .khung { grid-template-columns:calc(var(--ray-w) + var(--bang-w) + 2px) minmax(0,1fr); }
+}
 /* Trang khong co menu luon MOT cot, ke ca khi trinh duyet nho trang thai ghim */
 .khung.mot-cot, html.ghim .khung.mot-cot { grid-template-columns:1fr; }
 
@@ -840,10 +844,10 @@ button, [role=button], input[type=submit] {
   background:var(--do-cam); border-color:var(--do-cam); color:#fff;
   box-shadow:0 6px 14px rgba(194,65,12,.25);
 }
-.chinh :is(button, [role=button], input[type=submit]):not(.outline):not(.secondary):not(.nut-menu):not(.dn-mat):hover {
+.chinh :is(button, [role=button], input[type=submit]):not(.outline):not(.secondary):not(.nut-menu):not(.dn-mat):not([disabled]):hover {
   filter:brightness(1.05); transform:translateY(-1px);
 }
-.chinh :is(button, [role=button], input[type=submit]):not(.nut-menu):not(.dn-mat):active {
+.chinh :is(button, [role=button], input[type=submit]):not(.nut-menu):not(.dn-mat):not([disabled]):active {
   transform:scale(.98);
 }
 button.outline, [role=button].outline, button.secondary.outline {
@@ -854,7 +858,9 @@ button.outline:hover, [role=button].outline:hover {
 }
 button.contrast.outline { background:var(--white); border-color:var(--do-cam); color:var(--do-cam); }
 button.contrast.outline:hover { background:var(--orange-50); color:var(--do-cam-dam); }
-:is(button, input[type=submit])[disabled] { opacity:.5; filter:none; transform:none; cursor:not-allowed; }
+.chinh :is(button, input[type=submit])[disabled]:not(.nut-menu):not(.dn-mat):not(.outline):not(.secondary) {
+  opacity:.5; filter:none; transform:none; box-shadow:none; cursor:not-allowed;
+}
 *:focus-visible { outline:2px solid var(--blue-600); outline-offset:2px; }
 /* O nhap da co vong sang cua Pico: khong ve them vien thu hai */
 :is(input, select, textarea):focus-visible { outline:none; }
