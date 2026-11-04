@@ -216,12 +216,19 @@
 <script src="/static/vendor/uplot.iife.min.js"></script>
 <script>
 // Cung bang mau voi trang Lich su.
-// Mau sang cho nen toi (giao dien AI Aurora 2026-10-30); truc/luoi uPlot
+// Mau theo che do sang/toi (cong tac trong menu tai lai trang nay); truc/luoi uPlot
 // ve tren canvas nen CSS khong doi duoc - phai dat mau o day.
-const MAU = ["#60a5fa","#f87171","#34d399","#fbbf24","#a78bfa",
-             "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"];
-const TRUC = { stroke: "#97a3bd", grid: { stroke: "rgba(148,163,184,.10)" },
-               ticks: { stroke: "rgba(148,163,184,.18)" } };
+const TOI = document.documentElement.getAttribute("data-theme") === "dark";
+const MAU = TOI
+  ? ["#60a5fa","#fb7185","#34d399","#fbbf24","#a78bfa",
+     "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"]
+  : ["#0284C7","#E11D48","#059669","#D97706","#7C3AED",
+     "#0D9488","#CA8A04","#64748B","#DB2777","#EA580C","#0891B2"];
+const TRUC = TOI
+  ? { stroke: "#A0ACC4", grid: { stroke: "rgba(148,163,184,.12)" },
+      ticks: { stroke: "rgba(148,163,184,.2)" } }
+  : { stroke: "#475569", grid: { stroke: "rgba(100,116,139,.16)" },
+      ticks: { stroke: "rgba(100,116,139,.28)" } };
 
 function bytesVN(n) {
   if (n == null) return "-";
@@ -339,10 +346,10 @@ function veDia(d) {
     axes: [{ ...TRUC }, { ...TRUC, label: "GB", values: (u, vals) => vals.map(v => v.toFixed(0)) }],
     series: [
       {},
-      { label: "Đã dùng", stroke: "#60a5fa", width: 1.8, fill: "rgba(96,165,250,.14)", value: (u, v) => gbVN(v) },
-      { label: "Dự báo", stroke: "#60a5fa", width: 1.5, dash: [6, 5], value: (u, v) => gbVN(v) },
-      { label: "Ngưỡng chỉ đọc", stroke: "#fbbf24", width: 1.4, dash: [2, 4], value: (u, v) => gbVN(v) },
-      { label: "Dung lượng đĩa", stroke: "#f87171", width: 1.4, value: (u, v) => gbVN(v) },
+      { label: "Đã dùng", stroke: MAU[0], width: 1.8, fill: mauTrong(MAU[0], .12), value: (u, v) => gbVN(v) },
+      { label: "Dự báo", stroke: MAU[0], width: 1.5, dash: [6, 5], value: (u, v) => gbVN(v) },
+      { label: "Ngưỡng chỉ đọc", stroke: MAU[3], width: 1.4, dash: [2, 4], value: (u, v) => gbVN(v) },
+      { label: "Dung lượng đĩa", stroke: MAU[1], width: 1.4, value: (u, v) => gbVN(v) },
     ],
     legend: { live: true },
   }, data, el);

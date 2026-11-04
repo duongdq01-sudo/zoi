@@ -1,10 +1,10 @@
 {% extends "base.html" %}{% block title %}Đăng nhập &mdash; ggadmin{% endblock %}
-{# Theo mau "Glassmorphism Login" (Dribbble): card kinh tren anh nen, CSS o
-   style.css khoi "TRANG DANG NHAP". "Ghi nho" chi luu TEN tai khoan o
+{# CSS o style.css khoi "TRANG DANG NHAP". "Ghi nho" chi luu TEN tai khoan o
    localStorage cua trinh duyet - KHONG luu mat khau, khong keo dai phien. #}
 {% block html_class %}trang-login{% endblock %}
 {% block body %}
 <section class="dn-the" aria-labelledby="dn-tieu-de">
+  <div class="dn-logo" aria-hidden="true">gg</div>
   <h1 id="dn-tieu-de">Đăng nhập</h1>
   <p class="dn-phu">Chào mừng quay lại, đăng nhập để quản trị GoldenGate</p>
   {% if loi %}<p class="dn-loi" role="alert"><strong>{{ loi }}</strong></p>{% endif %}

@@ -9,7 +9,7 @@
 
 {% set r = recon or {} %}
 <div class="grid-3">
-  <article {% if r.get("capture_khong_map") %}style="border-left:4px solid #e74c3c"{% endif %}>
+  <article {% if r.get("capture_khong_map") %}style="border-left:4px solid var(--danger)"{% endif %}>
     <strong>{{ (r.get("capture_khong_map") or [])|length }}</strong> bảng
     <b>Extract lấy mà Replicat KHÔNG có MAP</b>
     <p><small>Cái bẫy số một của hệ này. Extract đọc redo và ghi vào trail,
@@ -20,7 +20,7 @@
       <code>{{ x.stream or "?" }}/{{ x.src_table }}</code>
     {% endfor %}
   </article>
-  <article {% if r.get("map_khong_prepared") %}style="border-left:4px solid #e74c3c"{% endif %}>
+  <article {% if r.get("map_khong_prepared") %}style="border-left:4px solid var(--danger)"{% endif %}>
     <strong>{{ (r.get("map_khong_prepared") or [])|length }}</strong> bảng
     <b>có MAP mà CHƯA bật TRANDATA</b>
     <p><small>Replicat chờ mãi không có dữ liệu, hoặc khoá bị suy luận
@@ -40,7 +40,7 @@
 </div>
 
 <div class="grid-3">
-  <article {% if r.get("con_handlecollisions") %}style="border-left:4px solid #e67e22"{% endif %}>
+  <article {% if r.get("con_handlecollisions") %}style="border-left:4px solid var(--warning)"{% endif %}>
     <strong>{{ (r.get("con_handlecollisions") or [])|length }}</strong> bảng còn
     <code>HANDLECOLLISIONS</code>
     <p><small>Phải là 0 khi không nạp dữ liệu: nó <em>che</em> lỗi

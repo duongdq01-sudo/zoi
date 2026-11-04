@@ -48,12 +48,19 @@
 // Chi 3 loai do thi nen viet truc tiep, khong can wrapper nang.
 // uPlot thay vi Chart.js: 47 KB so voi ~200 KB, va ve hang chuc nghin diem
 // khong nghen - poll 30s x nhieu metric x nhieu ngay thi dung la hang chuc nghin.
-// Mau sang cho nen toi (giao dien AI Aurora 2026-10-30); truc/luoi uPlot
+// Mau theo che do sang/toi (cong tac trong menu tai lai trang nay); truc/luoi uPlot
 // ve tren canvas nen CSS khong doi duoc - phai dat mau o day.
-const MAU = ["#60a5fa","#f87171","#34d399","#fbbf24","#a78bfa",
-             "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"];
-const TRUC = { stroke: "#97a3bd", grid: { stroke: "rgba(148,163,184,.10)" },
-               ticks: { stroke: "rgba(148,163,184,.18)" } };
+const TOI = document.documentElement.getAttribute("data-theme") === "dark";
+const MAU = TOI
+  ? ["#60a5fa","#fb7185","#34d399","#fbbf24","#a78bfa",
+     "#2dd4bf","#facc15","#94a3b8","#f472b6","#fb923c","#38bdf8"]
+  : ["#0284C7","#E11D48","#059669","#D97706","#7C3AED",
+     "#0D9488","#CA8A04","#64748B","#DB2777","#EA580C","#0891B2"];
+const TRUC = TOI
+  ? { stroke: "#A0ACC4", grid: { stroke: "rgba(148,163,184,.12)" },
+      ticks: { stroke: "rgba(148,163,184,.2)" } }
+  : { stroke: "#475569", grid: { stroke: "rgba(100,116,139,.16)" },
+      ticks: { stroke: "rgba(100,116,139,.28)" } };
 
 function ve(d) {
   const el = document.getElementById("chart");
