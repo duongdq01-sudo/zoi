@@ -98,8 +98,12 @@ def nhom_log(cfg) -> list[dict]:
          "duong": [f"{ob}/diag/clients"]},
         {"key": "app_log", "tran_gb": 0.2, "ten": "Log ggadmin", "loai": "ggadmin",
          "duong": [str(cfg.log_dir)]},
-        {"key": "app_data", "tran_gb": 3, "ten": "Số liệu + sao lưu ggadmin", "loai": "ggadmin",
-         "duong": [str(cfg.data_dir), str(app_dir / "backup")]},
+        # Hai nhom con cua "Số liệu + sao lưu ggadmin" (CHA) - do rieng de thay
+        # phan nao phinh. Truoc 2026-11-09 do chung mot khoa `app_data`.
+        {"key": "app_so_lieu", "tran_gb": 2, "ten": "Số liệu ggadmin", "loai": "ggadmin",
+         "cha": "app_data", "duong": [str(cfg.data_dir)]},
+        {"key": "app_sao_luu", "tran_gb": 2.5, "ten": "Sao lưu ggadmin", "loai": "ggadmin",
+         "cha": "app_data", "duong": [str(app_dir / "backup")]},
         {"key": "os_log", "tran_gb": 1, "ten": "/var/log (phần đọc được)", "loai": "Hệ điều hành",
          "duong": ["/var/log"]},
     ]
@@ -141,11 +145,20 @@ XOA = {
     "app_log": ("dieu_kien",
                 "Xoá được job_*.log, *.out cũ. Giữ audit-*.jsonl (vết thao tác) và app.log "
                 "đang ghi."),
-    "app_data": ("dieu_kien",
-                 "Không xoá ggadmin.db đang dùng. Xoá được ggadmin.db.*.premigrate cũ; thư mục "
-                 "backup tự xoay vòng 30 bản."),
+    "app_so_lieu": ("dieu_kien",
+                    "Không xoá ggadmin.db, ggadmin.db-wal, ggadmin.db-shm đang dùng. Xoá được "
+                    "ggadmin.db.*.premigrate cũ khi chắc không cần quay về bản trước nâng cấp."),
+    "app_sao_luu": ("dieu_kien",
+                    "Bản sao lưu ggadmin-*.db.gz và audit-*.jsonl.gz, tự xoay vòng 30 bản. Cần chỗ "
+                    "thì xoá bản cũ nhất, giữ vài bản gần nhất để khôi phục."),
     "os_log": ("khong",
                "Thuộc root, logrotate của hệ điều hành tự quản - user oracle không có quyền xoá."),
+}
+
+# Nhom CHA chi de hien thi: dong tong cong tren cac nhom con (STT 1, 1.1, 1.2).
+# Khong do, khong luu rieng, khong cong vao tong (tranh dem hai lan).
+CHA = {
+    "app_data": {"ten": "Số liệu + sao lưu ggadmin", "loai": "ggadmin"},
 }
 
 
@@ -316,6 +329,57 @@ def _so_ngay_con(con_trong: float, toc_do: float | None) -> float | None:
     return max(0.0, con_trong) / toc_do
 
 
+def bang_hien_thi(nhom: list[dict], nguong_pct: float, dia_map: dict) -> list[dict]:
+    """Dong cho bang Chi tiet: [{stt, con, n}].
+
+    Nhom doc lap va nhom CHA xep theo dung luong giam dan, STT 1, 2, ...
+    Ngay sau dong CHA la cac nhom con theo thu tu khai bao, STT "<cha>.1",
+    "<cha>.2". Dong CHA la tong cong cac con, tinh lai o day.
+    """
+    def _cong(ds: list[dict], k: str) -> float | None:
+        vals = [x[k] for x in ds if x.get(k) is not None]
+        return sum(vals) if vals else None
+
+    goc: list[tuple[dict, list[dict]]] = []
+    da_co: dict[str, list[dict]] = {}
+    for n in nhom:
+        ck = n.get("cha")
+        if not ck:
+            goc.append((n, []))
+        elif ck in da_co:
+            da_co[ck].append(n)
+        else:
+            da_co[ck] = [n]
+            goc.append(({"key": ck}, da_co[ck]))   # dien du sau
+    for cha, con in goc:
+        if not con:
+            continue
+        tran = _cong(con, "tran") or 0.0
+        b = _cong(con, "bytes") or 0.0
+        pct = b / tran * 100 if tran > 0 else 0.0
+        mount = con[0]["mount"]
+        d = dia_map.get(mount)
+        rong_ngay = _cong(con, "rong_ngay")
+        cha.update({
+            **CHA.get(cha["key"], {"ten": cha["key"], "loai": con[0]["loai"]}),
+            "duong": [p for x in con for p in x["duong"]],
+            "bytes": b, "files": _cong(con, "files"), "mount": mount,
+            "rong": _cong(con, "rong"), "phat_sinh": _cong(con, "phat_sinh"),
+            "rong_ngay": rong_ngay, "phat_sinh_ngay": _cong(con, "phat_sinh_ngay"),
+            "tran": tran, "pct_tran": pct, "vuot": pct > nguong_pct,
+            "ty_le": _cong(con, "ty_le") or 0.0,
+            "ngay_lam_day": _so_ngay_con(d["avail"], rong_ngay) if d else None,
+            "xoa": None, "xoa_ghi_chu": "Xem từng phần bên dưới.",
+        })
+    goc.sort(key=lambda x: x[0]["bytes"] or 0, reverse=True)
+    out = []
+    for i, (n, con) in enumerate(goc, 1):
+        out.append({"stt": str(i), "con": False, "cha": bool(con), "n": n})
+        out += [{"stt": f"{i}.{j}", "con": True, "cha": False, "n": c}
+                for j, c in enumerate(con, 1)]
+    return out
+
+
 def bao_cao(con: sqlite3.Connection, cfg, hours: int, moi_nhat: dict | None,
             kem_diem: bool = False) -> dict:
     """Tong hop cho trang Bieu do log.
@@ -343,7 +407,7 @@ def bao_cao(con: sqlite3.Connection, cfg, hours: int, moi_nhat: dict | None,
         hien = hien or {"bytes": 0, "files": 0, "mount": "/"}
         tran = tran_map[g["key"]]
         pct = (hien["bytes"] or 0) / tran * 100 if tran > 0 else 0.0
-        row = {**{k: g[k] for k in ("key", "ten", "loai", "duong")},
+        row = {**{k: g[k] for k in ("key", "ten", "loai", "duong")}, "cha": g.get("cha"),
                "bytes": hien["bytes"], "files": hien["files"],
                "mount": hien["mount"], **tang_truong(diem),
                "tran": tran, "pct_tran": pct, "vuot": pct > nguong_pct,
@@ -403,6 +467,7 @@ def bao_cao(con: sqlite3.Connection, cfg, hours: int, moi_nhat: dict | None,
         n["ngay_lam_day"] = _so_ngay_con(d["avail"], n["rong_ngay"]) if d else None
 
     return {
+        "bang": bang_hien_thi(nhom, nguong_pct, dia_map),
         "tu": since * 1000, "den": now * 1000, "hours": hours,
         "nguon": ("bản gom theo giờ (giá trị cuối giờ)" if dung_gio
                   else "số liệu gốc, 5 phút một điểm"),

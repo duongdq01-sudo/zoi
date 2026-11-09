@@ -209,3 +209,31 @@ def moi_nhom_deu_co_danh_gia_xoa():
         n = {x["key"]: x for x in bc["nhom"]}
         assert n["gg_trail"]["xoa"] == "khong" and n["ora_audit"]["xoa"] == "duoc"
         con.close()
+
+
+@test
+def so_lieu_va_sao_luu_tach_thanh_1x():
+    # Nhom "So lieu + sao luu ggadmin" tach 2 con do rieng; bang hien dong CHA
+    # la tong, ngay sau la <stt>.1 so lieu, <stt>.2 sao luu.
+    with tempfile.TemporaryDirectory() as t:
+        tp = Path(t)
+        cfg = _cfg(tp)
+        (cfg.data_dir).mkdir(parents=True, exist_ok=True)
+        (cfg.data_dir / "ggadmin.db").write_bytes(b"x" * 300)
+        bk = cfg.data_dir.parent / "backup"
+        bk.mkdir(parents=True, exist_ok=True)
+        (bk / "a.db.gz").write_bytes(b"y" * 700)
+        con = dbmod.init(tp / "x.db")
+        bc = logsize.bao_cao(con, cfg, 24, logsize.do(cfg))
+        b = bc["bang"]
+        i = next(k for k, r in enumerate(b) if r["n"]["key"] == "app_data")
+        cha, c1, c2 = b[i], b[i + 1], b[i + 2]
+        assert cha["cha"] and not cha["con"], cha
+        assert c1["stt"] == cha["stt"] + ".1" and c1["n"]["key"] == "app_so_lieu"
+        assert c2["stt"] == cha["stt"] + ".2" and c2["n"]["key"] == "app_sao_luu"
+        assert c1["n"]["bytes"] == 300 and c2["n"]["bytes"] == 700
+        assert cha["n"]["bytes"] == 1000 and cha["n"]["files"] == 2
+        # tong khong dem hai lan dong CHA
+        assert bc["tong"]["bytes"] == sum(n["bytes"] for n in bc["nhom"])
+        assert "app_data" not in {n["key"] for n in bc["nhom"]}
+        con.close()

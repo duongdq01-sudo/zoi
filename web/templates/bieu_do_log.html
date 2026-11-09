@@ -146,10 +146,10 @@
       <th style="min-width:16rem">Xoá được không</th>
     </tr></thead>
     <tbody>
-    {% for n in bc.nhom | sort(attribute='bytes', reverse=True) %}
-    <tr>
-      <td style="text-align:right">{{ loop.index }}</td>
-      <td><strong>{{ n.ten }}</strong><br>
+    {% for r in bc.bang %}{% set n = r.n %}
+    <tr{% if r.con %} style="background:var(--slate-50)"{% endif %}>
+      <td style="text-align:right">{{ r.stt }}</td>
+      <td{% if r.con %} style="padding-left:1.6rem"{% endif %}>{% if r.con %}<span class="muted" aria-hidden="true">↳ </span>{% endif %}<strong>{{ n.ten }}</strong>{% if r.cha %} <small class="muted">(tổng {{ r.stt }}.x)</small>{% endif %}<br>
         <small class="muted">{% for p in n.duong %}<code>{{ p }}</code>{% if not loop.last %} {% endif %}{% endfor %}</small></td>
       <td>{{ n.loai }}</td>
       <td style="text-align:right">{{ n.files|songuyen }}</td>
@@ -172,8 +172,8 @@
       <td>
         {% if n.xoa == 'duoc' %}<span class="pill ok">Xoá được</span>
         {% elif n.xoa == 'dieu_kien' %}<span class="pill warn">Có điều kiện</span>
-        {% else %}<span class="pill bad">Không xoá</span>{% endif %}
-        <br><small class="muted">{{ n.xoa_ghi_chu }}</small>
+        {% elif n.xoa %}<span class="pill bad">Không xoá</span>{% endif %}
+        {% if n.xoa %}<br>{% endif %}<small class="muted">{{ n.xoa_ghi_chu }}</small>
       </td>
     </tr>
     {% endfor %}
