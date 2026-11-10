@@ -10,21 +10,78 @@
 <pre class="log">{% for l in lines %}{{ l }}
 {% endfor %}</pre>
 
-<h4>File discard &mdash; dòng dữ liệu bị bỏ không áp được</h4>
-{% for rep, tail in dsc.items() %}
+<h4>File discard &mdash; lệnh không áp được vào đích</h4>
+<p><small class="muted">Mỗi khối lỗi được phân loại:
+<span class="bad">DML</span> = bản ghi dữ liệu bị bỏ, đích lệch nguồn (cảnh báo đỏ);
+<span class="warn">DDL</span> = lệnh cấu trúc/ghi chú bị bỏ (COMMENT, ALTER...),
+không mất dòng nào (cảnh báo vàng). Xử lý xong thì bấm <strong>Đánh dấu đã xử lý</strong>:
+ggadmin chỉ ghi mốc vào CSDL của mình, <strong>không sửa file GoldenGate</strong>;
+khối lỗi mới sau mốc vẫn được báo. Mốc tự hết hiệu lực khi file được tạo mới.</small></p>
+{% for rep, x in dsc.items() %}
   {% set d = s.discards.get(rep, {}) %}
-  <details {% if d.get('so_dong_la', 0) > 0 %}open{% endif %}>
+  {% set n_dml = d.get('so_ban_ghi_dml', 0) or 0 %}
+  {% set n_ddl = d.get('so_lenh_ddl', 0) or 0 %}
+  <details {% if n_dml or n_ddl %}open{% endif %}>
     <summary>
       <strong>{{ rep }}.dsc</strong>
-      {{ d.get('bytes', -1) }} byte / mốc rỗng {{ d.get('baseline') }}
-      {% if d.get('so_dong_la', 0) > 0 %}<span class="bad">{{ d.so_dong_la }} dòng lạ &mdash; CÓ DỮ LIỆU BỊ BỎ</span>
-      {% else %}<span class="ok">0 dòng lạ</span>{% endif %}
+      {{ d.get('bytes', -1)|songuyen }} byte
+      {% if n_dml %}<span class="bad">{{ n_dml }} bản ghi DML bị bỏ &mdash; DỮ LIỆU ĐÍCH LỆCH</span>{% endif %}
+      {% if n_ddl %}<span class="warn">{{ n_ddl }} lệnh DDL bị bỏ &mdash; không mất dòng dữ liệu</span>{% endif %}
+      {% if not n_dml and not n_ddl %}<span class="ok">sạch</span>{% endif %}
+      {% if d.get('da_xu_ly') %}<small class="muted">&middot; chỉ đếm sau mốc đã xử lý</small>{% endif %}
     </summary>
-    <pre class="log">{% for l in tail %}{{ l }}
+
+    {% if x.ack %}
+    <p><small>
+      {% if d.get('da_xu_ly') %}Mốc đã xử lý: byte {{ x.ack.offset|songuyen }}
+      {% else %}<span class="warn">Mốc cũ (byte {{ x.ack.offset|songuyen }}) HẾT HIỆU LỰC &mdash;
+        file đã được tạo mới, đang đếm từ đầu.</span>{% endif %}
+      &middot; {{ x.ack.username }} lúc {{ x.ack.ts|hhmm }}
+      ({{ x.ack.so_dml or 0 }} DML, {{ x.ack.so_ddl or 0 }} DDL)
+      &middot; lý do: {{ x.ack.reason }}
+      <br><span class="muted">bản sao lưu: <code>{{ x.ack.ban_luu }}</code></span>
+    </small></p>
+    {% endif %}
+
+    {% for k in x.khoi %}
+    <p style="margin:.4rem 0 .1rem">
+      <strong class="{{ 'bad' if k.loai == 'DML' else 'warn' }}">Khối {{ loop.index }}: {{ k.loai }}</strong>
+      <small class="muted">{{ 'bản ghi dữ liệu bị bỏ' if k.loai == 'DML' else 'lệnh cấu trúc, không mất dòng dữ liệu' }}</small>
+    </p>
+    <pre class="log">{% for l in k.dong %}{{ l }}
 {% endfor %}</pre>
+    {% endfor %}
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end">
+    {% if x.khoi %}
+    <form hx-post="/action/arm" hx-target="#khung-{{ rep }}" hx-swap="innerHTML">
+      <input type="hidden" name="op" value="DISCARD_ACK">
+      <input type="hidden" name="target" value="{{ rep }}">
+      <input type="text" name="reason" placeholder="đã xử lý thế nào (từ 10 ký tự)"
+             required minlength="10" style="width:22rem;display:inline-block">
+      <button type="submit" class="{{ 'contrast' if n_dml else '' }} outline">
+        Đánh dấu đã xử lý{% if n_dml %} (L2){% endif %}</button>
+    </form>
+    {% endif %}
+    {% if x.ack %}
+    <form hx-post="/action/arm" hx-target="#khung-{{ rep }}" hx-swap="innerHTML">
+      <input type="hidden" name="op" value="DISCARD_UNACK">
+      <input type="hidden" name="target" value="{{ rep }}">
+      <input type="text" name="reason" placeholder="lý do (từ 10 ký tự)"
+             required minlength="10" style="width:16rem;display:inline-block">
+      <button type="submit" class="secondary outline">Bỏ mốc, đếm lại từ đầu</button>
+    </form>
+    {% endif %}
+    </div>
+    <div id="khung-{{ rep }}"></div>
+
+    <details><summary><small>20 dòng cuối file (nguyên văn)</small></summary>
+    <pre class="log">{% for l in x.tail %}{{ l }}
+{% endfor %}</pre>
+    </details>
   </details>
 {% endfor %}
-<p><small class="muted">Chỉ đếm <strong>số dòng khác dòng mở đầu</strong>, không
-đếm byte: GoldenGate ghi một dòng mở đầu mỗi lần Replicat dừng, nên file to lên
-mà không bỏ bản ghi nào. Đếm theo byte sẽ báo động mỗi lần bảo trì.</small></p>
+<p><small class="muted">Chỉ đếm <strong>khối lỗi</strong>, không đếm byte:
+GoldenGate ghi một dòng mở đầu mỗi lần Replicat dừng/chạy, nên file to lên mà
+không bỏ bản ghi nào.</small></p>
 {% endblock %}

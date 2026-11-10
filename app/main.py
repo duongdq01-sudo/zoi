@@ -30,6 +30,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import auto, config, db, history, khoiphuc, logsize, registry
 from . import params as paramsmod
+from . import discard as discardmod
 from .adapters import gg, osfs
 from .adapters.ora import Ora, check_ident
 from .auth import COOKIE, MAX_AGE, Auth
@@ -340,7 +341,11 @@ async def logs(req: Request, chi_loi: int = 0, n: int = 120):
     auth.audit(u["username"], peer_of(req), "L0", "VIEW_LOG",
                target=f"ggserr.log chi_loi={chi_loi}")
     lines = osfs.ggserr_tail(cfg, lines=min(n, 1000), only_errors=bool(chi_loi))
-    dsc = {r: osfs.discard_tail(cfg, r, 20) for r in cfg.discard_baseline}
+    acks = db.discard_acks(con)
+    reps = [v["replicat"] for v in cfg.streams.values()]
+    dsc = {r: {"tail": osfs.discard_tail(cfg, r, 20),
+               "khoi": osfs.discard_khoi(cfg, r, acks.get(r), toi_da=30),
+               "ack": acks.get(r)} for r in reps}
     return tpl.TemplateResponse(req, "logs.html",
                                 ctx(req, lines=lines, dsc=dsc, chi_loi=chi_loi))
 
@@ -657,6 +662,11 @@ OPS: dict[str, tuple[str, str, str]] = {
     # sat vao dung luc can nhanh nhat, ma khong doi lay them an toan nao -
     # moi thao tac no chay deu dao nguoc duoc trong mot cu bam.
     "KHOI_PHUC":         (L1, "KHOI_PHUC",         "Khôi phục an toàn một luồng"),
+    # File discard: chi ghi moc vao CSDL ggadmin, KHONG sua file GG - xem
+    # app/discard.py. Muc o day la muc thap nhat; co ban ghi DML bi bo thi
+    # luc arm nang len L2 (go tay ten Replicat).
+    "DISCARD_ACK":       (L1, "DISCARD",           "Đánh dấu đã xử lý file discard"),
+    "DISCARD_UNACK":     (L1, "DISCARD",           "Bỏ mốc đã xử lý file discard (đếm lại từ đầu)"),
 }
 
 
@@ -874,6 +884,42 @@ async def action_arm(req: Request, op: str = Form(...), target: str = Form(""),
         # nua truoc khi UNREGISTER mot capture o DB nguon production.
         extra = {"go_tay": run["created_extract"] or f"#{target}"}
         dif = ""
+    if op == "DISCARD_ACK":
+        try:
+            xt = discardmod.xem_truoc(cfg, con, target)
+        except discardmod.DiscardError as e:
+            return _deny_html(e, 400)
+        target = xt["rep"]
+        if not xt["khoi"]:
+            # Khong co gi moi sau moc -> khong nap dan. Mot nut "Chay" bam
+            # vao khong lam gi la noi doi nguoi dung.
+            return tpl.TemplateResponse(req, "_tin.html", ctx(
+                req, tieu_de=f"{target}.dsc không có khối lỗi nào cần đánh dấu",
+                noi_dung="", ghi_chu="File chỉ còn dòng mở đầu của GoldenGate "
+                                     "sau mốc đã xử lý."))
+        extra = {"offset": xt["offset"], "dau": xt["dau"],
+                 "so_ddl": xt["so_ddl"], "so_dml": xt["so_dml"]}
+        if xt["so_dml"] > 0:
+            # Danh dau la TAT canh bao mat du lieu -> L2, go tay ten Replicat.
+            level = L2
+            extra["go_tay"] = target
+            nhan = (f"Đánh dấu đã xử lý {xt['so_dml']} BẢN GHI DỮ LIỆU bị bỏ"
+                    + (f" và {xt['so_ddl']} lệnh DDL" if xt["so_ddl"] else ""))
+        else:
+            nhan = f"Đánh dấu đã xử lý {xt['so_ddl']} lệnh DDL bị bỏ"
+        dif = (f"Ghi mốc đã xử lý {target}.dsc = byte {xt['offset']:,} vào CSDL "
+               "ggadmin. File GoldenGate GIỮ NGUYÊN; bản sao lưu ở "
+               "data/discard_luu/. Khối lỗi mới sau mốc này vẫn được đếm và báo.\n\n"
+               + xt["van_ban"])
+    if op == "DISCARD_UNACK":
+        try:
+            target = discardmod.kiem_replicat(cfg, target)
+        except discardmod.DiscardError as e:
+            return _deny_html(e, 400)
+        if not discardmod.lay_ack(con, target):
+            return _deny_html(ValueError(f"{target}.dsc chưa có mốc đã xử lý nào"), 400)
+        dif = (f"Xoá mốc đã xử lý của {target}.dsc: mọi khối lỗi trong file sẽ "
+               "được đếm lại từ đầu và cảnh báo bật lại nếu có.")
     if op == "PARAM_SAVE":
         try:
             cur = paramsmod.read(cfg, target)
@@ -1068,6 +1114,26 @@ async def _thuc_thi(p, who: str) -> dict:
                        "-> chạy Replicat)",
                 "chi_tiet": [f"{b['buoc']}: {'đạt' if b['ok'] else 'KHÔNG đạt'} ({b['chi_tiet']})" for b in r["buoc"]]
                             + [r["ghi_chu"]]}
+
+    if op == "DISCARD_ACK":
+        e = p.extra
+        r = discardmod.danh_dau(cfg, con, t, offset=int(e["offset"]), dau=e["dau"],
+                                who=who, reason=p.reason,
+                                ddl=int(e.get("so_ddl") or 0),
+                                dml=int(e.get("so_dml") or 0))
+        await collector.tick()
+        return {"msg": f"Đã đánh dấu {t}.dsc xử lý đến byte {r['offset']:,} "
+                       f"({r['so_dml']} bản ghi DML, {r['so_ddl']} lệnh DDL). "
+                       "File GoldenGate giữ nguyên.",
+                "chi_tiet": [f"bản sao lưu: {r['ban_luu']}",
+                             f"mốc cũ: {r['moc_cu'] if r['moc_cu'] is not None else 'chưa có'}"]}
+
+    if op == "DISCARD_UNACK":
+        r = discardmod.bo_danh_dau(cfg, con, t)
+        await collector.tick()
+        return {"msg": f"Đã xoá mốc đã xử lý của {t}.dsc (mốc cũ byte {r['moc_cu']:,}). "
+                       "File được đếm lại từ đầu.",
+                "chi_tiet": [f"bản sao lưu lần đánh dấu trước: {r['ban_luu']}"]}
 
     if op == "WIZARD_ROLLBACK":
         r = await wizard.rollback_new_stream(int(t), who, p.reason)

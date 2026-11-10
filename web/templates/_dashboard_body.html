@@ -11,7 +11,9 @@
 {% set lag_max = (lags | max) if lags else 0 %}
 {% set n_canh = s.alerts | length %}
 {% set gb = s.fs.get('avail_gb') or 0 %}
-{% set dong_la = s.discards.values() | map(attribute='so_dong_la')
+{% set dong_la = s.discards.values() | map(attribute='so_ban_ghi_dml')
+                 | select('number') | sum %}
+{% set ddl_bo = s.discards.values() | map(attribute='so_lenh_ddl')
                  | select('number') | sum %}
 
 {% set ic_proc %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>{% endset %}
@@ -60,11 +62,12 @@
   </div>
 
   <div class="kpi {{ 'tot' if dong_la == 0 else 'nguy' }}">
-    <div class="nhan">Dòng dữ liệu bị bỏ<span class="bg">{{ ic_bo }}</span></div>
+    <div class="nhan">Bản ghi dữ liệu bị bỏ<span class="bg">{{ ic_bo }}</span></div>
     <div class="so">{{ dong_la }}</div>
     <div class="duoi {{ 'tot' if dong_la == 0 else 'nguy' }}">
-      {% if dong_la == 0 %}▲ cả 3 file discard đều sạch
-      {% else %}▼ có bản ghi không áp được vào đích{% endif %}
+      {% if dong_la == 0 %}▲ không có bản ghi DML nào bị bỏ
+      {% else %}▼ có bản ghi không áp được vào đích &mdash; <a href="/logs">xem</a>{% endif %}
+      {% if ddl_bo %}<br><span class="warn">{{ ddl_bo }} lệnh DDL bị bỏ (không mất dữ liệu) &mdash; <a href="/logs">xem</a></span>{% endif %}
     </div>
   </div>
 </div>
@@ -113,7 +116,7 @@
   {% set dsc = s.discards.get(st.replicat, {}) %}
   {% set ck  = s.checkpoints | selectattr('group_name','equalto', st.replicat) | first %}
   {% set khoe = ext and rep and ext.is_running and rep.is_running
-                and (dsc.get('so_dong_la', 0) or 0) == 0 %}
+                and (dsc.get('so_ban_ghi_dml', 0) or 0) == 0 %}
   <article style="border-left:5px solid {{ 'var(--success)' if khoe else 'var(--danger)' }}">
     <header class="the-luong">
       <div>
@@ -154,9 +157,11 @@
         ({{ tr.get('newest_bytes')|bytes }})</small></span>
       <b>Dòng bị bỏ</b>
       <span>
-        {% if dsc.get('so_dong_la', 0) > 0 %}
-          <span class="bad">{{ dsc.so_dong_la }} dòng</span>
-        {% else %}<span class="ok">0 dòng lạ</span>{% endif %}
+        {% set n_dml = dsc.get('so_ban_ghi_dml', 0) or 0 %}
+        {% set n_ddl = dsc.get('so_lenh_ddl', 0) or 0 %}
+        {% if n_dml %}<a href="/logs" class="bad">{{ n_dml }} bản ghi DML</a>{% endif %}
+        {% if n_ddl %}<a href="/logs" class="warn">{{ n_ddl }} lệnh DDL (không mất dữ liệu)</a>{% endif %}
+        {% if not n_dml and not n_ddl %}<span class="ok">sạch</span>{% endif %}
         <small class="muted">file {{ dsc.get('bytes', -1) }} byte,
           mốc rỗng {{ dsc.get('baseline') }}</small>
       </span>

@@ -79,6 +79,7 @@ NHAN_OP = {
     "KHONG_CO": "thao tác chỉ đọc",
     "AUTO": "chạy tự động cả quy trình",
     "KHOI_PHUC": "khôi phục an toàn - chỉ chạy/dừng tiến trình",
+    "DISCARD": "đánh dấu file discard - không sửa file của GoldenGate",
 }
 
 
@@ -129,6 +130,7 @@ class Preflight:
             "AUTO": self._auto,
             "KHOI_PHUC": self._khoi_phuc,
             "LUONG_MAT": self._luong_mat,
+            "DISCARD": self._discard_danh_dau,
         }.get(op)
         if fn is None:
             return Result(op, target, [Check("thao tác không rõ", False,
@@ -181,6 +183,18 @@ class Preflight:
                       f"luồng {target!r} không còn trong conf/app.toml - không bước nào "
                       "của phiên này chạy tiếp được; phiên tạo luồng mới thì chỉ còn "
                       "đường dọn sạch")]
+
+    async def _discard_danh_dau(self, target: str) -> list[Check]:
+        """Danh dau / bo danh dau moc da xu ly cua file discard."""
+        reps = {v["replicat"] for v in self.cfg.streams.values()}
+        if target not in reps:
+            return [Check("Replicat", False, f"{target!r} không thuộc luồng nào")]
+        p = self.cfg.discard_path(target)
+        if not p.exists():
+            return [Check("file discard", False, f"không thấy {p}")]
+        return [Check("file discard", True,
+                      f"{p.name} đọc được; chỉ ghi mốc vào CSDL của ggadmin, file "
+                      "GoldenGate giữ nguyên", blocking=False)]
 
     async def _khong_co(self, target: str) -> list[Check]:
         """Buoc chi doc / khong co pre-flight rieng. Van giu 3 check chung."""
@@ -271,14 +285,25 @@ class Preflight:
         # Dem DONG KHONG PHAI BANNER, khong so kich thuoc voi moc rong:
         # stop/start Replicat lam file to len 94 byte ma khong bo ban ghi nao
         # (loi nay da chan oan dung buoc NAP cua wizard lan chay dau tien).
-        la = [f"{r}: {int(d['so_dong_la'])} dòng"
-              for r, d in s.discards.items() if (d.get("so_dong_la") or 0) > 0]
-        if la:
-            return [Check("dữ liệu bị bỏ", False, "; ".join(la)
-                          + " -> có dòng khác dòng mở đầu trong file discard, tức là "
-                            "có bản ghi bị bỏ. Đọc file đó trước khi đi tiếp.")]
-        return [Check("dữ liệu bị bỏ", True,
-                      "cả 3 file chỉ có dòng mở đầu, 0 bản ghi bị bỏ")]
+        # DML bi bo = mat du lieu -> CHAN. DDL bi bo (vd COMMENT ON COLUMN bi
+        # DDLERROR 942 DISCARD) khong mat dong nao -> chi CANH BAO, khong chan.
+        dml = [f"{r}: {int(d.get('so_ban_ghi_dml') or 0)} bản ghi"
+               for r, d in s.discards.items() if (d.get("so_ban_ghi_dml") or 0) > 0]
+        ddl = [f"{r}: {int(d.get('so_lenh_ddl') or 0)} lệnh DDL"
+               for r, d in s.discards.items() if (d.get("so_lenh_ddl") or 0) > 0]
+        out: list[Check] = []
+        if dml:
+            out.append(Check("dữ liệu bị bỏ", False, "; ".join(dml)
+                             + " -> có bản ghi dữ liệu bị bỏ trong file discard. Đọc ở "
+                               "trang Log, xử lý xong thì bấm \"Đánh dấu đã xử lý\"."))
+        else:
+            out.append(Check("dữ liệu bị bỏ", True,
+                             "0 bản ghi dữ liệu bị bỏ (sau mốc đã xử lý)"))
+        if ddl:
+            out.append(Check("lệnh DDL bị bỏ", False, "; ".join(ddl)
+                             + " -> không mất dòng dữ liệu, nhưng cấu trúc/ghi chú bảng "
+                               "đích có thể lệch nguồn.", blocking=False))
+        return out
 
     # ---------------------------------------------------------------- process
     def _proc(self, name: str) -> gg.ProcState | None:

@@ -95,6 +95,23 @@ CREATE TABLE IF NOT EXISTS alert_event (
 );
 CREATE INDEX IF NOT EXISTS ix_alert_open ON alert_event(closed_at, opened_at DESC);
 
+-- Moc "da xu ly" cua file discard, danh dau tren trang Log. KHONG sua file
+-- cua GoldenGate: chi nho "da doc va xu ly den byte offset nay". Dem dong la
+-- chi tinh phan SAU offset. `dau` = dong dau file (banner co thoi diem mo
+-- file) - file bi tao moi (restart voi PURGE) thi dau doi va moc tu het hieu
+-- luc. Ban sao noi dung luc danh dau nam o `ban_luu` (data/discard_luu/).
+CREATE TABLE IF NOT EXISTS discard_ack (
+  replicat   TEXT PRIMARY KEY,
+  offset     INTEGER NOT NULL,
+  dau        TEXT NOT NULL,
+  ts         INTEGER NOT NULL,
+  username   TEXT NOT NULL,
+  reason     TEXT,
+  so_ddl     INTEGER,
+  so_dml     INTEGER,
+  ban_luu    TEXT
+);
+
 -- Ghi 2 noi: bang nay (de query) VA logs/audit-YYYYMM.jsonl (de khong xoa
 -- duoc bang cung dac quyen). Hash chain chong sua.
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -322,14 +339,20 @@ DEFAULT_RULES = [
      "Replicat tre hon nguong canh bao.", "giay"),
     ("lag_replicat_nang", "PROCESS", None, "lag_s", ">", 1800, 120, "CRIT",
      "Replicat tre nang.", "giay"),
-    ("discard_lech_moc_rong", "DISCARD", None, "so_dong_la", ">", 0, 0, "CRIT",
-     "File discard có dòng KHÁC dòng mở đầu của GoldenGate -> Replicat đang "
-     "bỏ bản ghi. Đếm theo DÒNG chứ không theo BYTE: mỗi lần dừng và chạy "
-     "lại Replicat, GoldenGate ghi thêm một dòng mở đầu làm file to lên 94 "
-     "byte mà không bỏ bản ghi nào - đếm theo kích thước thì cảnh báo này nổ "
-     "sai mỗi lần bảo trì, và đó là cách chắc chắn nhất để người dùng học "
-     "cách bỏ qua chính cảnh báo quan trọng nhất.",
-     "dòng khác dòng mở đầu"),
+    ("discard_lech_moc_rong", "DISCARD", None, "so_ban_ghi_dml", ">", 0, 0, "CRIT",
+     "File discard có BẢN GHI DỮ LIỆU (INSERT/UPDATE/DELETE) bị bỏ -> dữ liệu "
+     "đích đang lệch nguồn. Lỗi DDL bị bỏ (COMMENT/ALTER...) không tính ở đây "
+     "mà ở luật discard_ddl_bi_bo. Đếm theo khối lỗi chứ không theo BYTE: mỗi "
+     "lần dừng và chạy lại Replicat, GoldenGate ghi thêm một dòng mở đầu làm "
+     "file to lên mà không bỏ bản ghi nào. Đã đối chiếu xong thì bấm \"Đánh "
+     "dấu đã xử lý\" ở trang Log để cảnh báo tắt.",
+     "bản ghi DML bị bỏ"),
+    ("discard_ddl_bi_bo", "DISCARD", None, "so_lenh_ddl", ">", 0, 0, "WARN",
+     "File discard có lệnh DDL bị bỏ (thường do DDLERROR ... DISCARD, ví dụ "
+     "COMMENT ON COLUMN báo ORA-00942). Không mất dòng dữ liệu nào, nhưng cấu "
+     "trúc/ghi chú bảng đích có thể lệch nguồn: kiểm tra cột hai bên, chạy "
+     "tay lệnh trên đích nếu cần, rồi bấm \"Đánh dấu đã xử lý\" ở trang Log.",
+     "lệnh DDL bị bỏ"),
     ("room_tablespace_thap", "TABLESPACE", None, "room_mb", "<", 10240, 0, "WARN",
      "Vùng lưu trữ còn ít chỗ. Hết chỗ thì Replicat sẽ dừng lỗi (ORA-01654).", "MB"),
     ("datafile_cham_tran_va_het_room", "DATAFILE", None, "size_mb", ">", 30720, 0, "WARN",
@@ -499,3 +522,13 @@ def ensure_user(con: sqlite3.Connection, username: str, pw: str, role: str,
         (username, full_name or username, hash_pwd(pw), role,
          1 if must_change else 0, int(time.time())))
     return True
+
+
+def discard_acks(con) -> dict[str, dict]:
+    """Moc 'da xu ly' cua tung file discard: {replicat: {offset, dau, ...}}."""
+    try:
+        return {r["replicat"]: dict(r) for r in con.execute(
+            "SELECT replicat, offset, dau, ts, username, reason, so_ddl, so_dml,"
+            " ban_luu FROM discard_ack")}
+    except Exception:                                 # noqa: BLE001
+        return {}

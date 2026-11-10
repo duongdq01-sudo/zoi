@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import history, logsize, registry
+from . import db, history, logsize, registry
 from .adapters import gg, osfs
 
 log = logging.getLogger("ggadmin.collector")
@@ -155,7 +155,7 @@ class Collector:
             s.errors.append(f"ggsci info all: {e}")
 
         try:
-            fsx = await osfs.a_snapshot(self.cfg)
+            fsx = await osfs.a_snapshot(self.cfg, db.discard_acks(self.con))
             s.fs = fsx["fs"]
             s.trails = fsx["trails"]
             s.discards = fsx["discards"]
@@ -258,6 +258,10 @@ class Collector:
             rows.append(("DISCARD", k, "delta_bytes", ts, float(v["delta_bytes"])))
             rows.append(("DISCARD", k, "so_dong_la", ts,
                          float(v.get("so_dong_la", -1))))
+            rows.append(("DISCARD", k, "so_ban_ghi_dml", ts,
+                         float(v.get("so_ban_ghi_dml", 0))))
+            rows.append(("DISCARD", k, "so_lenh_ddl", ts,
+                         float(v.get("so_lenh_ddl", 0))))
         if s.fs:
             for m in ("avail_bytes", "avail_pct", "avail_gb", "used_bytes"):
                 rows.append(("FS", "/", m, ts, float(s.fs[m])))
@@ -333,15 +337,19 @@ class Collector:
                 elif t_lag is not None and p.lag_s > t_lag:
                     fired.append(("lag_replicat_canh_bao", p.name, float(p.lag_s)))
 
+        # Dem theo KHOI LOI, tach DML (mat du lieu, CRIT) va DDL (lech cau
+        # truc, WARN). Chi tinh phan SAU moc "da xu ly" danh dau tren trang
+        # Log - xem osfs.discard_info. Khong dem byte: stop/start Replicat
+        # ghi them dong banner ma khong bo ban ghi nao.
         t_dsc = th("discard_lech_moc_rong", 0)
-        if t_dsc is not None:
-            for rep, d in s.discards.items():
-                # Dem DONG, khong dem BYTE: stop/start Replicat ghi them mot
-                # dong banner lam file to len 94 byte ma khong bo ban ghi nao.
-                # Dung byte thi canh bao no sai moi lan bao tri.
-                n_la = d.get("so_dong_la", 0)
-                if n_la is not None and n_la > t_dsc:
-                    fired.append(("discard_lech_moc_rong", rep, float(n_la)))
+        t_ddl = th("discard_ddl_bi_bo", 0)
+        for rep, d in s.discards.items():
+            n_dml = d.get("so_ban_ghi_dml") or 0
+            n_ddl = d.get("so_lenh_ddl") or 0
+            if t_dsc is not None and n_dml > t_dsc:
+                fired.append(("discard_lech_moc_rong", rep, float(n_dml)))
+            if t_ddl is not None and n_ddl > t_ddl:
+                fired.append(("discard_ddl_bi_bo", rep, float(n_ddl)))
 
         t_ab = th("abend_moi", 0)
         if t_ab is not None and s.abend_today > t_ab:
